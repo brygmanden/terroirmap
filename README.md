@@ -15,6 +15,10 @@ python3 -m http.server 8000
 
 Any static host works too, for example GitHub Pages, Netlify or Cloudflare Pages.
 
+### GitHub Pages
+
+`.github/workflows/pages.yml` deploys the site on every push to the default branch. To turn it on, go to **Settings → Pages → Build and deployment** and set **Source** to **GitHub Actions**. The site is then served at `https://brygmanden.github.io/terroirmap/`. You can also run it by hand from the **Actions** tab ("Deploy to GitHub Pages" → "Run workflow").
+
 ## Files
 
 | File | Purpose |
