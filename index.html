@@ -3,85 +3,114 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Coffee Origin Map</title>
+<title>Terroir Map</title>
 <meta name="description" content="Explore climate, altitude and soil at coffee-growing locations. Based on the Coffee Map by Prof Steven Abbott (CC BY).">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;800&display=swap">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.css">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<div class="shell">
-  <header class="masthead">
-    <div>
-      <p class="eyebrow">Coffee science · origin data</p>
-      <h1>Coffee Origin Map</h1>
-    </div>
-    <p class="lede">Zoom, pan and tilt the map (right-drag or Ctrl-drag to tilt), then click anywhere to load altitude, weather history and soil for that spot.</p>
+<div class="app">
+
+  <header class="topbar">
+    <h1><img src="assets/terroir-map-logo.png" alt="Terroir Map — Barista Hustle Tools" width="150" height="30"></h1>
+    <a class="brand-badge" href="https://www.baristahustle.com/" target="_blank" rel="noopener" aria-label="Barista Hustle"><img src="assets/barista-hustle.png" alt="" width="48" height="48"></a>
   </header>
 
   <main class="layout">
-    <section class="map-wrap" aria-label="Map">
+
+    <section class="map-pane" aria-label="Map">
       <div id="map" class="map"></div>
-      <div class="map-legend" aria-hidden="true">
-        <span class="swatch belt"></span> Coffee belt (Tropics of Cancer &amp; Capricorn)
-        <span class="swatch dot"></span> Known origins
+      <div id="hint" class="hint open">
+        <button id="hintBtn" class="hint-btn" type="button" aria-label="Hide help" aria-expanded="true">?</button>
+        <p class="hint-text">Pan, zoom and tilt the terrain (right-drag or two-finger drag), then tap any point for its altitude, weather history and soil.</p>
+      </div>
+      <div id="regionCard" class="region-card" hidden>
+        <div id="regionCardName" class="region-card-name"></div>
+        <div id="regionCardCountry" class="region-card-country"></div>
+      </div>
+      <div class="legend" aria-hidden="true">
+        <span class="legend-item"><span class="legend-belt"></span>Coffee belt</span>
+        <span class="legend-item"><span class="legend-dot"></span>Known origins</span>
       </div>
     </section>
 
     <aside class="panel" aria-label="Location data">
-      <div class="coords">
-        <label class="field"><span>Lat</span><input id="lat" type="number" step="0.01" min="-90" max="90" value="6.16"></label>
-        <label class="field"><span>Lon</span><input id="lon" type="number" step="0.01" min="-180" max="180" value="38.20"></label>
-        <div class="field readout"><span>Alt. m</span><output id="alt">–</output></div>
-        <div class="field readout" title="Temperature drop relative to sea level, using a standard lapse rate of 6.5 °C per km"><span>−ΔT °C</span><output id="dT">–</output></div>
-        <div class="field readout" title="UV relative to sea level, assuming about +10% per 1000 m of altitude"><span>UV-Rel</span><output id="uv">–</output></div>
-        <div class="field readout" title="Mean solar (shortwave) irradiance over the selected months"><span>W/m²</span><output id="wm2">–</output></div>
+
+      <div class="section">
+        <label class="field"><span class="label">Region</span>
+          <select id="region" class="control control-strong"></select>
+        </label>
+        <div class="grid-2">
+          <label class="field"><span class="label">Latitude</span>
+            <input id="lat" class="control num" type="number" inputmode="decimal" step="0.01" min="-90" max="90" value="6.16">
+          </label>
+          <label class="field"><span class="label">Longitude</span>
+            <input id="lon" class="control num" type="number" inputmode="decimal" step="0.01" min="-180" max="180" value="38.20">
+          </label>
+        </div>
       </div>
 
-      <div class="controls">
-        <label class="field"><span>Region</span>
-          <select id="region"></select>
-        </label>
-        <label class="field"><span>From</span><select id="from"></select></label>
-        <label class="field"><span>To</span><select id="to"></select></label>
-        <label class="field"><span># Years</span><select id="years"></select></label>
-        <label class="field wide"><span>Weather</span>
-          <select id="metric"></select>
-        </label>
+      <div id="readouts" class="section band readouts"></div>
+
+      <div class="section">
+        <div class="grid-3">
+          <label class="field"><span class="label">From</span><select id="from" class="control"></select></label>
+          <label class="field"><span class="label">To</span><select id="to" class="control"></select></label>
+          <label class="field"><span class="label">Years</span><select id="years" class="control"></select></label>
+        </div>
+        <div id="metrics" class="metrics" role="radiogroup" aria-label="Weather variable"></div>
       </div>
 
-      <div class="chart-card">
+      <div class="section band">
         <div class="chart-head">
-          <h2 id="chartTitle">Rain</h2>
+          <h2><span id="metricLabel">Rain</span> <span id="metricUnit" class="unit">mm / month</span></h2>
           <span id="status" class="status" role="status">Loading…</span>
         </div>
         <div id="chart" class="chart"></div>
-        <details class="table-view">
-          <summary>Show as table</summary>
-          <div id="table" class="table-scroll"></div>
-        </details>
+        <div><button id="tableBtn" class="link-btn" type="button">Show as table</button></div>
+        <div id="table" class="table-scroll" hidden></div>
       </div>
 
-      <dl class="info">
-        <div><dt>Weather Info</dt><dd id="weatherInfo">–</dd></div>
-        <div><dt>Vegetation</dt><dd id="vegetation">–</dd></div>
-        <div><dt>Soil Info</dt><dd id="soilInfo">–</dd></div>
-        <div><dt>Soil Type (% Probability)</dt><dd id="soilType">–</dd></div>
-      </dl>
+      <div class="section">
+        <h3 class="label">Weather · <span id="rangeName">–</span></h3>
+        <div id="summary" class="summary"></div>
+        <div id="fits" class="fits"></div>
+      </div>
+
+      <div class="section band">
+        <h3 class="label">Vegetation · Köppen–Geiger class</h3>
+        <div class="koppen">
+          <span id="kCode" class="koppen-code">–</span>
+          <div class="koppen-text">
+            <span id="kName" class="koppen-name"></span>
+            <span id="kVeg" class="koppen-veg"></span>
+          </div>
+        </div>
+        <p class="note">Estimated from the 12-month climatology, not a land-cover survey.</p>
+      </div>
+
+      <div class="section">
+        <h3 class="label">Soil · Topsoil 0–30 cm</h3>
+        <p id="soilMsg" class="note">Loading…</p>
+        <div id="soilProps" class="soil-props" hidden></div>
+        <h3 class="label">Soil type · WRB probability</h3>
+        <p id="soilTypeMsg" class="note">Loading…</p>
+        <div id="soilTypes" class="soil-types"></div>
+      </div>
+
+      <footer class="section credits">
+        <p>Based on the <a href="https://www.stevenabbott.co.uk/practical-mechanical/Coffee-Map.php" target="_blank" rel="noopener">Coffee Map</a> by Prof Steven Abbott, developed with Dr Anja Rahn and Barista Hustle (CC BY).
+        Data: <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a> (ERA5, elevation),
+        <a href="https://soilgrids.org/" target="_blank" rel="noopener">ISRIC SoilGrids</a>.
+        Imagery © Esri; terrain © Mapzen/AWS Terrain Tiles.</p>
+      </footer>
+
     </aside>
   </main>
-
-  <footer class="credits">
-    <p>Based on the <a href="https://www.stevenabbott.co.uk/practical-mechanical/Coffee-Map.php" target="_blank" rel="noopener">Coffee Map</a> by Prof Steven Abbott, developed with Dr Anja Rahn and Barista Hustle (CC BY).
-    Data: <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a> (ERA5 reanalysis, elevation),
-    <a href="https://soilgrids.org/" target="_blank" rel="noopener">ISRIC SoilGrids</a>,
-    imagery © Esri, terrain © Mapzen/AWS Terrain Tiles.</p>
-  </footer>
 </div>
-
-<div id="tooltip" class="tooltip" hidden></div>
 
 <script src="https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
 <script src="regions.js"></script>

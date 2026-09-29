@@ -23,9 +23,10 @@ Any static host works too, for example GitHub Pages, Netlify or Cloudflare Pages
 
 | File | Purpose |
 |---|---|
-| `index.html` | Page layout: map, input fields, controls, chart and info panel |
-| `style.css` | Design tokens (light and dark themes) and layout |
-| `app.js` | Map setup, data fetching, chart and table rendering, soil panel |
+| `index.html` | Page layout: top bar, map, and the data panel (inputs, readouts, chart, weather, vegetation, soil) |
+| `style.css` | Design tokens (colours, Archivo font, radius) and component styles, ported from the Claude Design file |
+| `app.js` | Map setup and look (`CONFIG`: imagery, terrain exaggeration, coffee belt), data fetching, rendering |
+| `assets/` | Terroir Map wordmark and Barista Hustle badge |
 | `climate.js` | Pure calculations: monthly aggregation, Köppen–Geiger class, altitude effects, coffee fit. Also works in Node (`require('./climate.js')`) |
 | `regions.js` | List of coffee regions (name, country, lat, lon, zoom) |
 | `docs/original-app.md` | Notes on the original app's interface |
@@ -53,6 +54,11 @@ All the APIs are free, need no key and allow cross-origin requests. Open-Meteo i
 - The region list in `regions.js`
 - Map imagery and terrain sources in the `style` object in `app.js`
 - Colours, fonts and spacing: the design tokens at the top of `style.css`
+- Map imagery (colour or grayscale), terrain exaggeration and the coffee belt overlay: `CONFIG` at the top of `app.js`
+
+## Design
+
+The look comes from a Claude Design file (Modernist system: Archivo, crimson accent `#c4274d`, square data tiles). It was ported to plain HTML/CSS rather than shipping the design tool's bundled runtime. To change the design, edit it in Claude Design, export it, and port the differences into `index.html` and `style.css`.
 
 ## Ideas for next steps
 
