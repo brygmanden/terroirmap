@@ -29,8 +29,8 @@ Any static host works too, for example GitHub Pages, Netlify or Cloudflare Pages
 | `assets/` | Terroir Map wordmark and Barista Hustle badge |
 | `climate.js` | Pure calculations: monthly aggregation, Köppen–Geiger class, altitude effects, coffee fit. Also works in Node (`require('./climate.js')`) |
 | `glossary.js` | Plain-language explanations for the hover tooltips (terms, abbreviations, soil groups, Köppen letters). Elements opt in with `data-tip="key"` |
-| `region-outlines.js` | Outlines of the coffee regions (administrative boundaries from [geoBoundaries](https://www.geoboundaries.org), CC BY 4.0, simplified to ~300 m). Sul de Minas, Cerrado Mineiro, Blue Mountains and Kona have none, as they don't follow an available boundary |
-| `regions.js` | List of coffee regions (name, country, lat, lon, zoom) |
+| `data/outlines/<CC>.json` | Region outlines, one file per country (ISO code), loaded only when a region in that country is selected |
+| `regions.js` | 389 coffee regions in 60 countries, sorted by country then region: name, other names, main species, label point and the admin units behind each outline |
 | `docs/original-app.md` | Notes on the original app's interface |
 
 ## What each output means
@@ -73,3 +73,10 @@ The look comes from a Claude Design file (Modernist system: crimson accent `#c42
 ## Backups
 
 Before bigger changes a backup branch is created, e.g. `backup/before-soil-overlay`. To roll back, open the backup branch on GitHub and compare it with the working branch, or ask Claude to restore it.
+
+## Regions data
+
+`regions.js` and `data/outlines/` are generated from `coffee_growing_regions.csv` / `.geojson` (built 2026-10-13: 387 regions in 60 countries), plus Huye (Rwanda) and Marcala (Honduras) from the earlier list, which the new list only covers as part of larger regions.
+
+- Outlines are administrative units, or unions of them where a coffee region (a mountain range, origin brand or GI) has no boundary of its own. Sources: Overture Maps divisions (OpenStreetMap-derived, ODbL); IBGE municipal boundaries for Brazil; geoBoundaries (CC BY 4.0) for Huye and Marcala. Simplified to about 300 m, with large lakes cut out.
+- Known limits: Yirgacheffe is drawn as Gedeo zone and Limu/Agaro/Gera as Jimma zone (no woreda outlines); Vietnam follows the 2025 province mergers; Burundi uses pre-2025 provinces; Kona and Kaʻū are the whole of Hawaiʻi County; Blue Mountains is its three parishes.

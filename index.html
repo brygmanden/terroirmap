@@ -57,15 +57,23 @@
     <aside class="panel" aria-label="Location data">
 
       <div class="section">
-        <label class="field"><span class="label term" data-tip="region">Region</span>
-          <select id="region" class="control control-strong"></select>
-        </label>
+        <div class="field region-picker">
+          <span id="regionLabel" class="label term" data-tip="region">Region</span>
+          <button id="regionBtn" class="control control-strong region-btn" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="regionPop" aria-labelledby="regionLabel regionBtnText">
+            <span id="regionBtnText" class="region-btn-text">Custom point (tap the map)</span>
+            <svg class="chev" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M2 4l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>
+          </button>
+          <div id="regionPop" class="region-pop" hidden>
+            <input id="regionSearch" class="control region-search" type="search" placeholder="Search regions or countries" aria-label="Search regions or countries" autocomplete="off">
+            <div id="regionList" class="region-list" aria-label="Coffee regions by country"></div>
+          </div>
+        </div>
         <div class="grid-2">
           <label class="field"><span class="label">Latitude</span>
-            <input id="lat" class="control num" type="number" inputmode="decimal" step="0.01" min="-90" max="90" value="6.16">
+            <input id="lat" class="control num" type="number" inputmode="decimal" step="0.01" min="-90" max="90" value="">
           </label>
           <label class="field"><span class="label">Longitude</span>
-            <input id="lon" class="control num" type="number" inputmode="decimal" step="0.01" min="-180" max="180" value="38.20">
+            <input id="lon" class="control num" type="number" inputmode="decimal" step="0.01" min="-180" max="180" value="">
           </label>
         </div>
       </div>
@@ -133,7 +141,6 @@
 
 <script src="https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
 <script src="regions.js"></script>
-<script src="region-outlines.js"></script>
 <script src="climate.js"></script>
 <script src="glossary.js"></script>
 <script src="app.js"></script>

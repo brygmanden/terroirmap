@@ -26,8 +26,9 @@
   const ACCENT = "#c4274d", INK = "#201e1d", OUTLINE = "#f9f9f9";
   const wide = window.matchMedia("(min-width: 960px)").matches;
 
+  const DEFAULT_REGION = R.find(r => /^Yirgacheffe/.test(r.name)) || R[0];
   const state = {
-    lat: 6.16, lon: 38.20,
+    regionId: DEFAULT_REGION.id, lat: DEFAULT_REGION.lat, lon: DEFAULT_REGION.lon,
     from: 0, to: 6, years: 5, metric: "rain",
     alt: null, altLoading: true,
     groups: null, yearSpan: null, loadSpan: null, wLoading: true, wError: false,
@@ -42,7 +43,6 @@
   fillSelect($("from"), C.MONTHS.map((m, i) => [i, m]), state.from);
   fillSelect($("to"), C.MONTHS.map((m, i) => [i, m]), state.to);
   fillSelect($("years"), Array.from({ length: 10 }, (_, i) => [i + 1, i + 1]), state.years);
-  fillSelect($("region"), [["", "Custom point (tap the map)"], ...R.map((r, i) => [i, `${r[0]} — ${r[1]}`])], 0);
 
   $("metrics").innerHTML = Object.entries(C.METRICS).map(([k, m]) =>
     `<button type="button" role="radio" class="metric-btn" data-metric="${k}" data-tip="metric.${k}" aria-checked="${k === state.metric}">${esc(m.label)}</button>`
@@ -58,10 +58,80 @@
   $("from").addEventListener("change", e => { state.from = +e.target.value; state.hover = null; renderWeather(); });
   $("to").addEventListener("change", e => { state.to = +e.target.value; state.hover = null; renderWeather(); });
   $("years").addEventListener("change", e => { state.years = +e.target.value; loadWeather(); });
-  $("region").addEventListener("change", e => {
-    if (e.target.value === "") return;
-    const r = R[+e.target.value];
-    selectPoint(r[2], r[3], { fly: true, zoom: r[4], region: e.target.value });
+
+  // ---------- Region picker: countries expand to show their regions ----------
+  const byId = new Map(R.map(r => [r.id, r]));
+  const countries = [];
+  for (const r of R) {
+    const last = countries[countries.length - 1];
+    if (last && last.name === r.country) last.regions.push(r);
+    else countries.push({ name: r.country, regions: [r] });
+  }
+  const fold = s => s.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  const expanded = new Set();
+  const chev = `<svg class="chev" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M2 4l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>`;
+
+  function renderRegionList() {
+    const q = fold($("regionSearch").value.trim());
+    let html = "";
+    countries.forEach((c, ci) => {
+      const countryHit = q && fold(c.name).includes(q);
+      const list = !q || countryHit ? c.regions : c.regions.filter(r => fold(r.name + " " + r.aka).includes(q));
+      if (!list.length) return;
+      const open = q ? true : expanded.has(c.name);
+      html += `<div class="country"><button type="button" class="country-btn" data-country="${ci}" aria-expanded="${open}">`
+        + `${esc(c.name)}<span class="country-count">${list.length}</span>${chev}</button>`;
+      if (open) {
+        html += `<div class="country-regions">` + list.map(r =>
+          `<button type="button" class="region-item" data-region="${esc(r.id)}"${r.id === state.regionId ? ' aria-current="true"' : ""}>`
+          + `<span class="region-item-name">${esc(r.name)}</span>`
+          + `<span class="region-meta">${esc(r.species)}${r.aka ? " · " + esc(r.aka) : ""}</span></button>`
+        ).join("") + `</div>`;
+      }
+      html += `</div>`;
+    });
+    $("regionList").innerHTML = html || `<p class="region-empty">No regions match “${esc($("regionSearch").value)}”.</p>`;
+  }
+  function setPicker(open) {
+    $("regionPop").hidden = !open;
+    $("regionBtn").setAttribute("aria-expanded", String(open));
+    if (!open) return;
+    const cur = byId.get(state.regionId);
+    if (cur) expanded.add(cur.country);
+    $("regionSearch").value = "";
+    renderRegionList();
+    const sel = $("regionList").querySelector('[aria-current="true"]');
+    if (sel) sel.scrollIntoView({ block: "center" });
+    $("regionSearch").focus();
+  }
+  function updateRegionButton() {
+    const r = byId.get(state.regionId);
+    $("regionBtnText").textContent = r ? `${r.name} — ${r.country}` : "Custom point (tap the map)";
+  }
+  $("regionBtn").addEventListener("click", () => setPicker($("regionPop").hidden));
+  $("regionSearch").addEventListener("input", renderRegionList);
+  $("regionList").addEventListener("click", e => {
+    const cb = e.target.closest("[data-country]");
+    if (cb) {
+      const name = countries[+cb.dataset.country].name;
+      expanded.has(name) ? expanded.delete(name) : expanded.add(name);
+      renderRegionList();
+      $("regionList").querySelector(`[data-country="${cb.dataset.country}"]`).focus();
+      return;
+    }
+    const rb = e.target.closest("[data-region]");
+    if (rb) {
+      const r = byId.get(rb.dataset.region);
+      setPicker(false);
+      $("regionBtn").focus();
+      selectPoint(r.lat, r.lon, { fly: true, region: r.id });
+    }
+  });
+  document.addEventListener("pointerdown", e => {
+    if (!$("regionPop").hidden && !e.target.closest(".region-picker")) setPicker(false);
+  });
+  document.addEventListener("keydown", e => {
+    if (e.key === "Escape" && !$("regionPop").hidden) { setPicker(false); $("regionBtn").focus(); }
   });
 
   function commitCoords() {
@@ -107,7 +177,7 @@
   };
   const regionGeo = {
     type: "FeatureCollection",
-    features: R.map((r, i) => ({ type: "Feature", properties: { i, name: r[0], country: r[1] }, geometry: { type: "Point", coordinates: [r[3], r[2]] } })),
+    features: R.map(r => ({ type: "Feature", properties: { id: r.id, name: r.name, country: r.country }, geometry: { type: "Point", coordinates: [r.lon, r.lat] } })),
   };
   const pointGeo = (lat, lon) => ({ type: "FeatureCollection", features: [{ type: "Feature", properties: {}, geometry: { type: "Point", coordinates: [lon, lat] } }] });
   const beltVis = CONFIG.showBelt ? "visible" : "none";
@@ -137,7 +207,7 @@
         tropics: { type: "geojson", data: tropicLines },
         regions: { type: "geojson", data: regionGeo },
         picked: { type: "geojson", data: pointGeo(state.lat, state.lon) },
-        outline: { type: "geojson", data: { type: "FeatureCollection", features: [] }, attribution: "Region outlines © geoBoundaries (CC BY 4.0)" },
+        outline: { type: "geojson", data: { type: "FeatureCollection", features: [] }, attribution: "Region outlines: © OpenStreetMap contributors (ODbL) via Overture Maps, IBGE, geoBoundaries" },
       },
       layers: [
         { id: "sat", type: "raster", source: "sat", paint: { "raster-saturation": CONFIG.imagery === "grayscale" ? -1 : 0, "raster-contrast": 0.08 } },
@@ -214,8 +284,8 @@
   map.on("click", e => {
     const hit = map.queryRenderedFeatures(e.point, { layers: ["regions"] })[0];
     if (hit) {
-      const r = R[hit.properties.i];
-      selectPoint(r[2], r[3], { region: String(hit.properties.i) });
+      const r = byId.get(hit.properties.id);
+      selectPoint(r.lat, r.lon, { region: r.id });
     } else {
       selectPoint(e.lngLat.lat, e.lngLat.lng);
     }
@@ -228,42 +298,60 @@
     state.hover = null;
     $("lat").value = state.lat.toFixed(2);
     $("lon").value = state.lon.toFixed(2);
-    $("region").value = opts.region ?? "";
+    state.regionId = opts.region || null;
+    updateRegionButton();
     const src = map.getSource("picked");
     if (src) src.setData(pointGeo(state.lat, state.lon));
-    const fitted = showRegion(opts.region, opts.fly);
-    if (opts.fly && !fitted) map.flyTo({ center: [state.lon, state.lat], zoom: opts.zoom || Math.max(map.getZoom(), 8), pitch: 55, essential: true });
+    showRegion(state.regionId, opts.fly);
+    if (opts.fly && !state.regionId) map.flyTo({ center: [state.lon, state.lat], zoom: Math.max(map.getZoom(), 8), pitch: 55, essential: true });
     loadAll();
   }
 
   // ---------- Selected region: name label + dashed outline ----------
-  // Outlines are administrative boundaries from region-outlines.js; regions without one just get the label.
+  // Outlines live in data/outlines/<country code>.json and are fetched per country when first needed.
   const labelEl = document.createElement("div");
   labelEl.className = "region-label";
-  const regionLabel = new maplibregl.Marker({ element: labelEl, anchor: "bottom", offset: [0, -12] });
+  const regionLabel = new maplibregl.Marker({ element: labelEl, anchor: "bottom", offset: [0, -12], opacityWhenCovered: "1" });
+  const outlineFiles = new Map();
+  function loadOutline(r) {
+    if (!outlineFiles.has(r.cc)) {
+      const p = fetch(`data/outlines/${r.cc}.json`).then(res => { if (!res.ok) throw new Error(res.status); return res.json(); });
+      p.catch(() => outlineFiles.delete(r.cc));
+      outlineFiles.set(r.cc, p);
+    }
+    return outlineFiles.get(r.cc).then(d => d[r.id] || null);
+  }
   function geomBounds(g) {
     const b = new maplibregl.LngLatBounds();
     const walk = c => (typeof c[0] === "number" ? b.extend(c) : c.forEach(walk));
     walk(g.coordinates);
     return b;
   }
-  // Shows region `idx` (string index into COFFEE_REGIONS, or ""/undefined to clear).
-  // With fit, zooms to the outline; returns true if it did.
-  function showRegion(idx, fit) {
-    const r = idx != null && idx !== "" ? R[+idx] : null;
-    const o = r && window.REGION_OUTLINES && window.REGION_OUTLINES[r[0]];
-    const data = { type: "FeatureCollection", features: o ? [{ type: "Feature", properties: {}, geometry: o.geometry }] : [] };
+  function setOutline(geom) {
+    const data = { type: "FeatureCollection", features: geom ? [{ type: "Feature", properties: {}, geometry: geom }] : [] };
     const apply = () => map.getSource("outline").setData(data);
     map.getSource("outline") ? apply() : map.once("load", apply);
-    if (!r) { regionLabel.remove(); return false; }
-    labelEl.innerHTML = `<span class="region-label-name">${esc(r[0])}</span><span class="region-label-country">${esc(r[1])}</span>`;
-    labelEl.title = o ? `Outline: ${o.unit}` : "";
-    regionLabel.setLngLat([r[3], r[2]]).addTo(map);
-    if (!o || !fit) return false;
-    map.fitBounds(geomBounds(o.geometry), { padding: 60, pitch: 50, maxZoom: 11, essential: true });
-    return true;
   }
-  showRegion($("region").value);
+  // Shows region `id` (or clears with null). With fit, zooms to its outline (or its label point if it has none).
+  async function showRegion(id, fit) {
+    const r = id ? byId.get(id) : null;
+    setOutline(null);
+    if (!r) { regionLabel.remove(); return; }
+    labelEl.innerHTML = `<span class="region-label-name">${esc(r.name)}</span><span class="region-label-country">${esc(r.country)}</span>`;
+    labelEl.title = r.units ? `Outline: ${r.approx ? "approximated from " : ""}${r.units}` : "";
+    regionLabel.setLngLat([r.lon, r.lat]).addTo(map);
+    let geom = null;
+    try { geom = await loadOutline(r); } catch (err) { /* no outline: label only */ }
+    if (state.regionId !== id) return; // another selection happened meanwhile
+    setOutline(geom);
+    if (!fit) return;
+    if (geom) map.fitBounds(geomBounds(geom), { padding: 60, pitch: 50, maxZoom: 11, essential: true });
+    else map.flyTo({ center: [r.lon, r.lat], zoom: 9, pitch: 55, essential: true });
+  }
+  updateRegionButton();
+  $("lat").value = state.lat.toFixed(2);
+  $("lon").value = state.lon.toFixed(2);
+  showRegion(state.regionId);
 
   // "Loading regional data…" shows while any of altitude, weather or soil is still loading.
   const pending = new Set();

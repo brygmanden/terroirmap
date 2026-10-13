@@ -19,8 +19,8 @@ window.GLOSSARY = (function () {
     // ---- Location ----
     "region": {
       title: "Region",
-      what: "A list of well-known coffee origins, each with a representative point in the growing area.",
-      why: "Use it to see what a famous origin's climate and soil look like, then compare it with any other spot you click on the map.",
+      what: "389 known coffee-growing regions in 60 countries, grouped by country. Click a country to see its regions, or type to search; each region shows its main species and other names it goes by.",
+      why: "Choosing a region zooms the map to its outline and loads its altitude, weather and soil, so you can compare famous origins with each other or with any spot you tap on the map.",
     },
 
     // ---- Readouts ----
