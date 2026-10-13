@@ -76,12 +76,21 @@
     $(id).addEventListener("keydown", e => { if (e.key === "Enter") commitCoords(); });
   }
 
-  $("hintBtn").addEventListener("click", () => {
-    const open = !$("hint").classList.contains("open");
+  function setHint(open) {
     $("hint").classList.toggle("open", open);
     $("hintBtn").setAttribute("aria-expanded", String(open));
     $("hintBtn").setAttribute("aria-label", open ? "Hide help" : "Show help");
-  });
+  }
+  $("hintBtn").addEventListener("click", () => setHint(!$("hint").classList.contains("open")));
+  // Minimise the help box on the first click anywhere (except its own ? button) or after 15 s.
+  const autoHideHint = () => {
+    clearTimeout(hintTimer);
+    document.removeEventListener("pointerdown", onFirstPointer, true);
+    setHint(false);
+  };
+  const onFirstPointer = e => { if (!e.target.closest("#hintBtn")) autoHideHint(); };
+  const hintTimer = setTimeout(autoHideHint, 15000);
+  document.addEventListener("pointerdown", onFirstPointer, true);
 
   $("tableBtn").addEventListener("click", () => {
     state.showTable = !state.showTable;
@@ -256,6 +265,13 @@
   }
   showRegion($("region").value);
 
+  // "Loading regional data…" shows while any of altitude, weather or soil is still loading.
+  const pending = new Set();
+  function setLoading(kind, on) {
+    on ? pending.add(kind) : pending.delete(kind);
+    $("loading").hidden = pending.size === 0;
+  }
+
   function loadAll() {
     loadElevation();
     loadWeather();
@@ -280,7 +296,7 @@
   let elevToken = 0;
   async function loadElevation() {
     const token = ++elevToken;
-    state.altLoading = true; renderReadouts();
+    state.altLoading = true; renderReadouts(); setLoading("elevation", true);
     let alt = null;
     try {
       const d = await getJSON(`https://api.open-meteo.com/v1/elevation?latitude=${f4(state.lat)}&longitude=${f4(state.lon)}`);
@@ -290,6 +306,7 @@
       if (q != null) alt = q / (map.getTerrain()?.exaggeration || 1);
     }
     if (token !== elevToken) return;
+    setLoading("elevation", false);
     state.alt = alt == null || Number.isNaN(alt) ? null : alt;
     state.altLoading = false;
     renderReadouts();
@@ -302,6 +319,7 @@
     const endYear = new Date().getFullYear() - 1; // last complete year
     const startYear = endYear - state.years + 1;
     Object.assign(state, { wLoading: true, wError: false, loadSpan: [startYear, endYear] });
+    setLoading("weather", true);
     renderWeather();
     const url = "https://archive-api.open-meteo.com/v1/archive"
       + `?latitude=${f4(state.lat)}&longitude=${f4(state.lon)}`
@@ -311,9 +329,11 @@
       const d = await getJSON(url);
       if (token !== weatherToken) return;
       Object.assign(state, { groups: C.groupMonthly(d.daily), yearSpan: [startYear, endYear], wLoading: false });
+      setLoading("weather", false);
     } catch (err) {
       if (token !== weatherToken) return;
       Object.assign(state, { groups: null, wLoading: false, wError: true });
+      setLoading("weather", false);
     }
     renderWeather();
   }
@@ -502,7 +522,7 @@
   }
   async function loadSoil() {
     const token = ++soilToken;
-    setSoil("Loading…", "Loading…");
+    setSoil("Loading…", "Loading…"); setLoading("soil", true);
     $("soilProps").hidden = true; $("soilTypes").innerHTML = "";
     const base = "https://rest.isric.org/soilgrids/v2.0";
     const ll = `lon=${f4(state.lon)}&lat=${f4(state.lat)}`;
@@ -513,6 +533,7 @@
 
     const [props, cls] = await Promise.allSettled([getJSON(propUrl), getJSON(classUrl)]);
     if (token !== soilToken) return;
+    setLoading("soil", false);
 
     // Topsoil properties, depth-weighted over 0–30 cm
     let msg;

@@ -21,9 +21,14 @@
 
     <section class="map-pane" aria-label="Map">
       <div id="map" class="map"></div>
-      <div id="hint" class="hint open">
-        <button id="hintBtn" class="hint-btn" type="button" aria-label="Hide help" aria-expanded="true">?</button>
-        <p class="hint-text">Pan, zoom and tilt the terrain (right-drag or two-finger drag), then tap any point for its altitude, weather history and soil.</p>
+      <div class="map-topleft">
+        <div id="hint" class="hint open">
+          <button id="hintBtn" class="hint-btn" type="button" aria-label="Hide help" aria-expanded="true">?</button>
+          <p class="hint-text">Pan, zoom and tilt the terrain (right-drag or two-finger drag), then tap any point for its altitude, weather history and soil.</p>
+        </div>
+        <div id="loading" class="map-loading" role="status" hidden>
+          <span class="spinner" aria-hidden="true"></span>Loading regional data…
+        </div>
       </div>
       <div class="map-stack">
         <div id="regionCard" class="region-card" hidden>
