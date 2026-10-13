@@ -1,5 +1,18 @@
 /* Terroir Map — design tokens and components, ported from the Claude Design file (Modernist system).
    Layout: top bar, then map (fills) | data panel (440px); stacks below 960px. Change the look via the tokens. */
+@font-face {
+  font-family: "Head"; font-weight: 700; font-style: normal; font-display: swap;
+  src: url("https://www.baristahustle.com/wp-content/themes/divi-child/assets/fonts/head/Head-Bold.woff2") format("woff2");
+}
+@font-face {
+  font-family: "NoBH"; font-weight: 400; font-style: normal; font-display: swap;
+  src: url("https://www.baristahustle.com/wp-content/themes/divi-child/assets/fonts/nobh/NoBH-Regular.woff2") format("woff2");
+}
+@font-face {
+  font-family: "NoBH"; font-weight: 700; font-style: normal; font-display: swap;
+  src: url("https://www.baristahustle.com/wp-content/themes/divi-child/assets/fonts/nobh/NoBH-Bold.woff2") format("woff2");
+}
+
 :root {
   --color-bg: #f3f2f2;
   --color-surface: #eae9e9;
@@ -19,9 +32,11 @@
   --color-accent-700: #921838;
   --color-accent-800: #69132b;
 
-  --font-body: "Archivo", system-ui, sans-serif;
-  --font-heading: "Archivo", system-ui, sans-serif;
-  --font-heading-weight: 800;
+  /* Barista Hustle fonts (see @font-face below): Head for headings and large text,
+     NoBH for everything else. Any weight of 600+ on NoBH uses NoBH-Bold (sub-headings, emphasis). */
+  --font-body: "NoBH", system-ui, sans-serif;
+  --font-heading: "Head", "NoBH", system-ui, sans-serif;
+  --font-heading-weight: 700;
 
   --radius: 6px;
   --shadow-md: 0 3px 10px color-mix(in srgb, #2d2b2b 16%, transparent);
@@ -37,7 +52,8 @@ body {
   background: var(--color-bg); color: var(--color-text);
   font: 400 14px/1.5 var(--font-body);
 }
-h1, h2, h3 { font-family: var(--font-heading); margin: 0; }
+h1, h2, h3 { margin: 0; }
+h1, h2 { font-family: var(--font-heading); font-weight: var(--font-heading-weight); }
 p { margin: 0; }
 a { color: var(--color-accent-700); text-underline-offset: 3px; }
 a:hover { color: var(--color-accent); }
@@ -121,7 +137,7 @@ select.control { padding-inline: 8px; }
 .readouts { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
 .readout { background: var(--color-field); padding: 10px 10px 10px 12px; display: grid; gap: 2px; min-width: 0; border-radius: var(--radius); }
 .readout-v {
-  font-size: 24px; font-weight: 800; line-height: 1.1; letter-spacing: -.02em;
+  font-family: var(--font-heading); font-size: 24px; font-weight: 700; line-height: 1.1; letter-spacing: -.02em;
   font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .readout-u { font-size: 11px; color: var(--color-neutral-700); white-space: nowrap; }
@@ -139,7 +155,7 @@ select.control { padding-inline: 8px; }
 
 /* chart */
 .chart-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 4px 12px; }
-.chart-head h2 { font-size: 20px; font-weight: 800; letter-spacing: -.015em; }
+.chart-head h2 { font-size: 20px; letter-spacing: -.015em; }
 .unit { font-size: 12px; font-weight: 400; letter-spacing: 0; color: var(--color-neutral-700); }
 .status { font-size: 12px; font-variant-numeric: tabular-nums; color: var(--color-neutral-700); }
 .status.error { color: var(--color-accent-700); }
@@ -190,7 +206,7 @@ select.control { padding-inline: 8px; }
 
 /* Köppen */
 .koppen { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 16px; align-items: baseline; }
-.koppen-code { font-size: 40px; font-weight: 800; line-height: 1; letter-spacing: -.03em; color: var(--color-accent); }
+.koppen-code { font-family: var(--font-heading); font-size: 40px; font-weight: 700; line-height: 1; letter-spacing: -.03em; color: var(--color-accent); }
 .koppen-text { display: grid; gap: 2px; }
 .koppen-name { font-size: 15px; font-weight: 800; line-height: 1.25; }
 .koppen-veg { font-size: 13px; color: var(--color-neutral-800); text-wrap: pretty; }

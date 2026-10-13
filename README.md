@@ -59,7 +59,7 @@ All the APIs are free, need no key and allow cross-origin requests. Open-Meteo i
 
 ## Design
 
-The look comes from a Claude Design file (Modernist system: Archivo, crimson accent `#c4274d`, square data tiles). It was ported to plain HTML/CSS rather than shipping the design tool's bundled runtime. To change the design, edit it in Claude Design, export it, and port the differences into `index.html` and `style.css`.
+The look comes from a Claude Design file (Modernist system: crimson accent `#c4274d`, square data tiles), with Barista Hustle's fonts: Head-Bold for headings and large numbers, NoBH-Bold for sub-headings and emphasis, NoBH-Regular for body text. The fonts load from baristahustle.com. It was ported to plain HTML/CSS rather than shipping the design tool's bundled runtime. To change the design, edit it in Claude Design, export it, and port the differences into `index.html` and `style.css`.
 
 ## Ideas for next steps
 
