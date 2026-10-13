@@ -28,6 +28,7 @@ Any static host works too, for example GitHub Pages, Netlify or Cloudflare Pages
 | `app.js` | Map setup and look (`CONFIG`: imagery, terrain exaggeration, coffee belt), data fetching, rendering |
 | `assets/` | Terroir Map wordmark and Barista Hustle badge |
 | `climate.js` | Pure calculations: monthly aggregation, Köppen–Geiger class, altitude effects, coffee fit. Also works in Node (`require('./climate.js')`) |
+| `glossary.js` | Plain-language explanations for the hover tooltips (terms, abbreviations, soil groups, Köppen letters). Elements opt in with `data-tip="key"` |
 | `regions.js` | List of coffee regions (name, country, lat, lon, zoom) |
 | `docs/original-app.md` | Notes on the original app's interface |
 

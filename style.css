@@ -211,6 +211,19 @@ select.control { padding-inline: 8px; }
 
 .credits { font-size: 11px; color: var(--color-neutral-700); padding-top: 8px; }
 
+/* — glossary tooltips (text in glossary.js; shown after hovering a term for 1.5 s) — */
+[data-tip]:not(button) { cursor: help; }
+.term {
+  text-decoration: underline dotted color-mix(in srgb, currentColor 45%, transparent);
+  text-decoration-thickness: 1px; text-underline-offset: 3px;
+}
+.tip {
+  position: fixed; z-index: 20; max-width: min(300px, calc(100vw - 16px));
+  padding: 10px 12px; border-radius: var(--radius); pointer-events: none;
+  background: var(--color-text); color: var(--color-bg); box-shadow: var(--shadow-md);
+  font: 400 13px/1.45 var(--font-body); text-transform: none; letter-spacing: 0; text-wrap: pretty;
+}
+
 /* — wide: fixed-height app, map fills, panel scrolls — */
 @media (min-width: 960px) {
   .app { height: 100dvh; }

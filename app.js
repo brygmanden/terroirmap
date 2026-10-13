@@ -39,7 +39,7 @@
   fillSelect($("region"), [["", "Custom point (tap the map)"], ...R.map((r, i) => [i, `${r[0]} — ${r[1]}`])], 0);
 
   $("metrics").innerHTML = Object.entries(C.METRICS).map(([k, m]) =>
-    `<button type="button" role="radio" class="metric-btn" data-metric="${k}" aria-checked="${k === state.metric}">${esc(m.label)}</button>`
+    `<button type="button" role="radio" class="metric-btn" data-metric="${k}" data-tip="metric.${k}" aria-checked="${k === state.metric}">${esc(m.label)}</button>`
   ).join("");
   $("metrics").addEventListener("click", e => {
     const btn = e.target.closest("[data-metric]");
@@ -246,13 +246,13 @@
   function renderReadouts() {
     const a = state.altLoading ? "…" : state.alt == null ? "–" : null;
     const rows = [
-      { k: "Altitude", v: a || Math.round(state.alt).toLocaleString("en-US"), u: "m a.s.l.", title: "Copernicus DEM 90 m" },
-      { k: "−ΔT", v: a || C.tempDrop(state.alt).toFixed(1), u: "°C vs sea level", title: "Temperature drop at 6.5 °C per 1000 m" },
-      { k: "UV-Rel", v: a || "×" + C.uvRelative(state.alt).toFixed(2), u: "vs sea level", title: "About +10% UV per 1000 m" },
-      { k: "Irrad.", v: irradiance == null ? "–" : String(Math.round(irradiance)), u: "W/m², period", title: "Mean shortwave irradiance over the selected months" },
+      { k: "Altitude", v: a || Math.round(state.alt).toLocaleString("en-US"), u: "m a.s.l.", tip: "altitude" },
+      { k: "−ΔT", v: a || C.tempDrop(state.alt).toFixed(1), u: "°C vs sea level", tip: "deltaT" },
+      { k: "UV-Rel", v: a || "×" + C.uvRelative(state.alt).toFixed(2), u: "vs sea level", tip: "uvRel" },
+      { k: "Irrad.", v: irradiance == null ? "–" : String(Math.round(irradiance)), u: "W/m², period", tip: "irradiance" },
     ];
     $("readouts").innerHTML = rows.map(r =>
-      `<div class="readout" title="${r.title}"><span class="label">${r.k}</span><span class="readout-v">${r.v}</span><span class="readout-u">${r.u}</span></div>`
+      `<div class="readout" data-tip="${r.tip}"><span class="label term">${r.k}</span><span class="readout-v">${r.v}</span><span class="readout-u">${r.u}</span></div>`
     ).join("");
   }
 
@@ -265,6 +265,7 @@
     $("chart").innerHTML = ""; $("table").innerHTML = ""; $("table").hidden = true;
     $("rangeName").textContent = "–"; $("summary").innerHTML = ""; $("fits").innerHTML = "";
     $("kCode").textContent = "–"; $("kName").textContent = ""; $("kVeg").textContent = "";
+    delete $("kCode").dataset.tip;
     irradiance = null; renderReadouts();
   }
 
@@ -313,18 +314,18 @@
 
     $("rangeName").textContent = months.length === 12 ? "All year" : `${C.MONTHS[months[0]]}–${C.MONTHS[months[months.length - 1]]}`;
     const summary = [
-      ["Rain, period", Math.round(sum(pick(rain, months))).toLocaleString("en-US"), "mm"],
-      ["Mean temp.", fmt(avg(pick(tMean, months))), "°C"],
-      ["Max / min", `${fmt(avg(pick(tMax, months)))} / ${fmt(avg(pick(tMin, months)))}`, "°C"],
-      ["Sunshine", fmt(avg(pick(sun, months))), "h/day"],
-      ["Annual rain", Math.round(MAP).toLocaleString("en-US"), "mm"],
-      ["Annual mean", fmt(MAT), "°C"],
+      ["Rain, period", Math.round(sum(pick(rain, months))).toLocaleString("en-US"), "mm", "rainPeriod"],
+      ["Mean temp.", fmt(avg(pick(tMean, months))), "°C", "meanTemp"],
+      ["Max / min", `${fmt(avg(pick(tMax, months)))} / ${fmt(avg(pick(tMin, months)))}`, "°C", "maxMin"],
+      ["Sunshine", fmt(avg(pick(sun, months))), "h/day", "sunshine"],
+      ["Annual rain", Math.round(MAP).toLocaleString("en-US"), "mm", "annualRain"],
+      ["Annual mean", fmt(MAT), "°C", "annualMean"],
     ];
-    $("summary").innerHTML = summary.map(([k, v, u]) =>
-      `<div class="stat"><span class="stat-k">${k}</span><span class="stat-v">${v} <span class="unit">${u}</span></span></div>`
+    $("summary").innerHTML = summary.map(([k, v, u, tip]) =>
+      `<div class="stat" data-tip="stat.${tip}"><span class="stat-k term">${k}</span><span class="stat-v">${v} <span class="unit">${u}</span></span></div>`
     ).join("");
     $("fits").innerHTML = C.coffeeFit(MAT, MAP).map(t =>
-      `<span class="fit${/optimum/.test(t) ? " optimum" : /Outside/.test(t) ? " outside" : ""}">${t}</span>`
+      `<span class="fit${/optimum/.test(t) ? " optimum" : /Outside/.test(t) ? " outside" : ""}" data-tip="fit.${t}">${t}</span>`
     ).join("");
 
     // Vegetation via Köppen–Geiger climate class from the full-year climatology
@@ -333,10 +334,12 @@
       const code = C.koppen(T, P, state.lat >= 0);
       const [name, veg] = C.koppenText(code);
       $("kCode").textContent = code;
+      $("kCode").dataset.tip = "koppen." + code;
       $("kName").textContent = name;
       $("kVeg").textContent = veg ? veg.charAt(0).toUpperCase() + veg.slice(1) + "." : "";
     } else {
       $("kCode").textContent = "–"; $("kName").textContent = "Not enough data"; $("kVeg").textContent = "";
+      delete $("kCode").dataset.tip;
     }
   }
 
@@ -449,7 +452,7 @@
         const u = layer.unit_measure || {};
         const val = sum / w / (u.d_factor || 1);
         const unit = layer.name === "phh2o" ? "" : (u.target_units || "").replace("cmol(c)/kg", "cmol₍c₎/kg");
-        out.push(`<div class="soil-row"><span>${esc(SOIL_PROPS[layer.name] || layer.name)}</span>`
+        out.push(`<div class="soil-row"><span class="term" data-tip="soil.${esc(layer.name)}">${esc(SOIL_PROPS[layer.name] || layer.name)}</span>`
           + `<span><strong>${val.toFixed(val < 10 ? 1 : 0)}</strong> <span class="unit">${esc(unit)}</span></span></div>`);
       }
       $("soilProps").innerHTML = out.join("");
@@ -464,13 +467,59 @@
     const probs = cls.status === "fulfilled" ? (cls.value.wrb_class_probability || []).filter(p => p[1] > 0) : [];
     if (probs.length) {
       $("soilTypes").innerHTML = probs.map(([name, p]) =>
-        `<div class="prob"><span class="prob-name">${esc(name)}</span><span class="prob-track"><span class="prob-fill" style="width:${+p}%"></span></span><span class="prob-pct">${+p}%</span></div>`
+        `<div class="prob"><span class="prob-name term" data-tip="wrb.${esc(name)}">${esc(name)}</span><span class="prob-track"><span class="prob-fill" style="width:${+p}%"></span></span><span class="prob-pct">${+p}%</span></div>`
       ).join("");
     } else {
       typeMsg = cls.status === "fulfilled" ? "No soil classification here." : "Soil classification unavailable right now.";
     }
     setSoil(msg, typeMsg);
   }
+
+  // ---------- Tooltips ----------
+  // Hovering a term (any [data-tip] element) for 1.5 s shows its plain-language explanation from glossary.js.
+  // Keyboard focus on a [data-tip] element works the same way; Escape closes.
+  const TIP_DELAY = 1500;
+  const tip = $("tip");
+  let tipTimer = null, tipTarget = null;
+
+  function hideTip() {
+    clearTimeout(tipTimer); tipTimer = null;
+    if (tipTarget) tipTarget.removeAttribute("aria-describedby");
+    tipTarget = null;
+    tip.hidden = true;
+  }
+  function showTip(el) {
+    const text = window.GLOSSARY.get(el.dataset.tip);
+    if (!text || !el.isConnected) return;
+    tip.textContent = text;
+    tip.hidden = false;
+    el.setAttribute("aria-describedby", "tip");
+    // Below the term, or above it when there is no room; kept inside the viewport.
+    const r = el.getBoundingClientRect(), tw = tip.offsetWidth, th = tip.offsetHeight, gap = 8;
+    const left = Math.max(8, Math.min(r.left, innerWidth - tw - 8));
+    const top = r.bottom + gap + th <= innerHeight - 8 ? r.bottom + gap : Math.max(8, r.top - gap - th);
+    tip.style.left = left + "px";
+    tip.style.top = top + "px";
+  }
+  function armTip(el) {
+    if (el === tipTarget) return;
+    hideTip();
+    if (!el || !window.GLOSSARY.get(el.dataset.tip || "")) return;
+    tipTarget = el;
+    tipTimer = setTimeout(() => showTip(el), TIP_DELAY);
+  }
+  document.addEventListener("pointerover", e => {
+    if (e.pointerType === "touch") return;
+    armTip(e.target.closest("[data-tip]"));
+  });
+  document.addEventListener("pointerout", e => {
+    if (tipTarget && !(e.relatedTarget && tipTarget.contains(e.relatedTarget))) hideTip();
+  });
+  document.addEventListener("focusin", e => armTip(e.target.closest("[data-tip]")));
+  document.addEventListener("focusout", hideTip);
+  document.addEventListener("keydown", e => { if (e.key === "Escape") hideTip(); });
+  document.addEventListener("pointerdown", hideTip);
+  document.addEventListener("scroll", hideTip, true);
 
   // ---------- Start ----------
   renderReadouts();
