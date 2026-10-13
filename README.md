@@ -29,6 +29,7 @@ Any static host works too, for example GitHub Pages, Netlify or Cloudflare Pages
 | `assets/` | Terroir Map wordmark and Barista Hustle badge |
 | `climate.js` | Pure calculations: monthly aggregation, Köppen–Geiger class, altitude effects, coffee fit. Also works in Node (`require('./climate.js')`) |
 | `glossary.js` | Plain-language explanations for the hover tooltips (terms, abbreviations, soil groups, Köppen letters). Elements opt in with `data-tip="key"` |
+| `region-outlines.js` | Outlines of the coffee regions (administrative boundaries from [geoBoundaries](https://www.geoboundaries.org), CC BY 4.0, simplified to ~300 m). Sul de Minas, Cerrado Mineiro, Blue Mountains and Kona have none, as they don't follow an available boundary |
 | `regions.js` | List of coffee regions (name, country, lat, lon, zoom) |
 | `docs/original-app.md` | Notes on the original app's interface |
 

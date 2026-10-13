@@ -23,7 +23,7 @@
   const SOIL_WMS = "https://maps.isric.org/mapserv?map=/map/wrb.map&SERVICE=WMS&VERSION=1.3.0";
   const SOIL_TILES = `${SOIL_WMS}&REQUEST=GetMap&LAYERS=MostProbable&STYLES=&CRS=EPSG:3857&BBOX={bbox-epsg-3857}&WIDTH=256&HEIGHT=256&FORMAT=image/png&TRANSPARENT=TRUE`;
   const SOIL_LEGEND = `${SOIL_WMS}&REQUEST=GetLegendGraphic&LAYER=MostProbable&FORMAT=image/png&SLD_VERSION=1.1.0`;
-  const ACCENT = "#c4274d", INK = "#201e1d";
+  const ACCENT = "#c4274d", INK = "#201e1d", OUTLINE = "#f9f9f9";
   const wide = window.matchMedia("(min-width: 960px)").matches;
 
   const state = {
@@ -128,6 +128,7 @@
         tropics: { type: "geojson", data: tropicLines },
         regions: { type: "geojson", data: regionGeo },
         picked: { type: "geojson", data: pointGeo(state.lat, state.lon) },
+        outline: { type: "geojson", data: { type: "FeatureCollection", features: [] }, attribution: "Region outlines © geoBoundaries (CC BY 4.0)" },
       },
       layers: [
         { id: "sat", type: "raster", source: "sat", paint: { "raster-saturation": CONFIG.imagery === "grayscale" ? -1 : 0, "raster-contrast": 0.08 } },
@@ -135,6 +136,9 @@
         { id: "soil", type: "raster", source: "soil", layout: { visibility: "none" }, paint: { "raster-opacity": CONFIG.soilOpacity, "raster-fade-duration": 150 } },
         { id: "belt", type: "fill", source: "belt", layout: { visibility: beltVis }, paint: { "fill-color": "rgba(196,39,77,0.07)" } },
         { id: "tropics", type: "line", source: "tropics", layout: { visibility: beltVis }, paint: { "line-color": ACCENT, "line-width": 2, "line-dasharray": [3, 2] } },
+        // Selected region's outline: a faint dark casing keeps the light dashed line readable on bright imagery.
+        { id: "outline-casing", type: "line", source: "outline", layout: { "line-join": "round" }, paint: { "line-color": "rgba(32,30,29,0.45)", "line-width": 4 } },
+        { id: "outline", type: "line", source: "outline", layout: { "line-join": "round" }, paint: { "line-color": OUTLINE, "line-width": 2, "line-dasharray": [3, 2] } },
         { id: "regions", type: "circle", source: "regions", paint: {
           "circle-radius": ["interpolate", ["linear"], ["zoom"], 2, 4, 8, 7], "circle-color": ACCENT,
           "circle-stroke-color": "#ffffff", "circle-stroke-width": 2 } },
@@ -148,13 +152,24 @@
   map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "top-right");
   map.addControl(new maplibregl.TerrainControl({ source: "dem", exaggeration: CONFIG.exaggeration }), "top-right");
   map.addControl(new maplibregl.ScaleControl({ unit: "metric" }), "bottom-right");
-  // Start with the compact attribution collapsed to its (i) button.
-  const collapseAttrib = () => {
-    const a = document.querySelector("#map .maplibregl-ctrl-attrib");
-    if (a) { a.classList.remove("maplibregl-compact-show"); a.removeAttribute("open"); }
-  };
-  map.once("styledata", () => setTimeout(collapseAttrib, 0));
-  map.on("load", () => { collapseAttrib(); map.setTerrain({ source: "dem", exaggeration: CONFIG.exaggeration }); });  new ResizeObserver(() => map.resize()).observe($("map"));
+  // Keep the compact attribution collapsed to its (i) button so it doesn't cover the legend.
+  // MapLibre re-expands it whenever the credits change, so undo that until the viewer opens it themselves.
+  const attrib = document.querySelector("#map .maplibregl-ctrl-attrib");
+  if (attrib) {
+    let userOpened = false;
+    // Capture phase, so this runs before MapLibre's own toggle handler.
+    attrib.addEventListener("click", e => { if (e.target.closest(".maplibregl-ctrl-attrib-button")) userOpened = true; }, true);
+    const collapse = () => {
+      if (!userOpened && attrib.classList.contains("maplibregl-compact-show")) {
+        attrib.classList.remove("maplibregl-compact-show");
+        attrib.removeAttribute("open");
+      }
+    };
+    new MutationObserver(collapse).observe(attrib, { attributes: true, attributeFilter: ["class"] });
+    collapse();
+  }
+  map.on("load", () => map.setTerrain({ source: "dem", exaggeration: CONFIG.exaggeration }));
+  new ResizeObserver(() => map.resize()).observe($("map"));
 
   // ---------- Soil type overlay ----------
   // Off by default, so no soil images are requested until someone switches it on.
@@ -207,9 +222,39 @@
     $("region").value = opts.region ?? "";
     const src = map.getSource("picked");
     if (src) src.setData(pointGeo(state.lat, state.lon));
-    if (opts.fly) map.flyTo({ center: [state.lon, state.lat], zoom: opts.zoom || Math.max(map.getZoom(), 8), pitch: 55, essential: true });
+    const fitted = showRegion(opts.region, opts.fly);
+    if (opts.fly && !fitted) map.flyTo({ center: [state.lon, state.lat], zoom: opts.zoom || Math.max(map.getZoom(), 8), pitch: 55, essential: true });
     loadAll();
   }
+
+  // ---------- Selected region: name label + dashed outline ----------
+  // Outlines are administrative boundaries from region-outlines.js; regions without one just get the label.
+  const labelEl = document.createElement("div");
+  labelEl.className = "region-label";
+  const regionLabel = new maplibregl.Marker({ element: labelEl, anchor: "bottom", offset: [0, -12] });
+  function geomBounds(g) {
+    const b = new maplibregl.LngLatBounds();
+    const walk = c => (typeof c[0] === "number" ? b.extend(c) : c.forEach(walk));
+    walk(g.coordinates);
+    return b;
+  }
+  // Shows region `idx` (string index into COFFEE_REGIONS, or ""/undefined to clear).
+  // With fit, zooms to the outline; returns true if it did.
+  function showRegion(idx, fit) {
+    const r = idx != null && idx !== "" ? R[+idx] : null;
+    const o = r && window.REGION_OUTLINES && window.REGION_OUTLINES[r[0]];
+    const data = { type: "FeatureCollection", features: o ? [{ type: "Feature", properties: {}, geometry: o.geometry }] : [] };
+    const apply = () => map.getSource("outline").setData(data);
+    map.getSource("outline") ? apply() : map.once("load", apply);
+    if (!r) { regionLabel.remove(); return false; }
+    labelEl.innerHTML = `<span class="region-label-name">${esc(r[0])}</span><span class="region-label-country">${esc(r[1])}</span>`;
+    labelEl.title = o ? `Outline: ${o.unit}` : "";
+    regionLabel.setLngLat([r[3], r[2]]).addTo(map);
+    if (!o || !fit) return false;
+    map.fitBounds(geomBounds(o.geometry), { padding: 60, pitch: 50, maxZoom: 11, essential: true });
+    return true;
+  }
+  showRegion($("region").value);
 
   function loadAll() {
     loadElevation();
