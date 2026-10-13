@@ -45,6 +45,7 @@ Any static host works too, for example GitHub Pages, Netlify or Cloudflare Pages
 | Vegetation | Köppen–Geiger class (Peel et al. 2007 thresholds) worked out from the 12-month climatology, with a typical vegetation description |
 | Soil Info | ISRIC SoilGrids v2.0 properties, depth-weighted over 0–30 cm: pH, organic carbon, clay, sand, silt, nitrogen, CEC |
 | Soil Type | SoilGrids WRB reference soil group probabilities (top 5) |
+| Soil types map | Map overlay (switch in the map legend): most probable WRB soil group from the ISRIC SoilGrids WMS (`maps.isric.org`, layer `MostProbable`), with ISRIC's own colour legend. Works on the flat map and the 3D terrain |
 
 All the APIs are free, need no key and allow cross-origin requests. Open-Meteo is free for non-commercial use; commercial use needs their paid plan. SoilGrids is a beta service and is sometimes slow, so the app shows a message and carries on without it.
 
@@ -55,7 +56,7 @@ All the APIs are free, need no key and allow cross-origin requests. Open-Meteo i
 - The region list in `regions.js`
 - Map imagery and terrain sources in the `style` object in `app.js`
 - Colours, fonts and spacing: the design tokens at the top of `style.css`
-- Map imagery (colour or grayscale), terrain exaggeration and the coffee belt overlay: `CONFIG` at the top of `app.js`
+- Map imagery (colour or grayscale), terrain exaggeration, the coffee belt overlay and the soil overlay's default opacity: `CONFIG` at the top of `app.js`
 
 ## Design
 
@@ -67,3 +68,7 @@ The look comes from a Claude Design file (Modernist system: crimson accent `#c42
 - Add a proper land-cover layer for Vegetation (for example ESA WorldCover)
 - Allow comparing two origins side by side
 - Export the monthly table as CSV
+
+## Backups
+
+Before bigger changes a backup branch is created, e.g. `backup/before-soil-overlay`. To roll back, open the backup branch on GitHub and compare it with the working branch, or ask Claude to restore it.

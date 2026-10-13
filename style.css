@@ -96,21 +96,55 @@ a:hover { color: var(--color-accent); }
 .hint-btn:hover { background: var(--color-neutral-200); }
 .hint-text { padding: 2px 6px 2px 0; font-size: 13px; line-height: 1.45; text-wrap: pretty; }
 
+/* Bottom-left stack: origin card, soil panel, legend (bottom-anchored so they never overlap). */
+.map-stack {
+  position: absolute; left: 12px; bottom: 12px; z-index: 2; max-width: calc(100% - 24px);
+  display: flex; flex-direction: column; align-items: flex-start; gap: 8px; pointer-events: none;
+}
+.map-stack > * { pointer-events: auto; }
 .region-card {
-  position: absolute; left: 12px; bottom: 52px; padding: 8px 12px; pointer-events: none;
+  padding: 8px 12px; pointer-events: none !important;
   background: var(--color-bg); border: 2px solid var(--color-text);
 }
 .region-card-name { font-weight: 800; font-size: 15px; line-height: 1.2; }
 .region-card-country { font-size: 12px; color: var(--color-neutral-700); }
 
 .legend {
-  position: absolute; left: 12px; bottom: 12px; max-width: calc(100% - 24px);
   display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px;
   padding: 6px 10px; background: var(--color-bg); font-size: 12px; border-radius: var(--radius);
 }
 .legend-item { display: inline-flex; align-items: center; gap: 6px; }
 .legend-belt { width: 16px; height: 0; border-top: 2px dashed var(--color-accent); }
 .legend-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--color-accent); box-shadow: 0 0 0 2px #fff, 0 0 0 3px var(--color-text); }
+
+/* soil type overlay */
+.soil-toggle {
+  display: inline-flex; align-items: center; gap: 6px; padding: 2px 0; border: 0; background: none;
+  font: inherit; font-size: 12px; font-weight: 700; color: var(--color-text); cursor: pointer;
+}
+.soil-switch {
+  position: relative; width: 26px; height: 15px; flex: none; border-radius: 99px;
+  background: var(--color-neutral-300); transition: background .15s;
+}
+.soil-switch::after {
+  content: ""; position: absolute; top: 2px; left: 2px; width: 11px; height: 11px; border-radius: 50%;
+  background: #fff; box-shadow: 0 1px 2px rgba(0, 0, 0, .3); transition: transform .15s;
+}
+.soil-toggle[aria-checked="true"] .soil-switch { background: var(--color-accent); }
+.soil-toggle[aria-checked="true"] .soil-switch::after { transform: translateX(11px); }
+
+.soil-panel {
+  width: min(260px, 100%); display: grid; gap: 8px; padding: 10px 12px;
+  background: var(--color-bg); border-radius: var(--radius); box-shadow: var(--shadow-md); font-size: 12px;
+}
+.soil-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.soil-panel-title { font-weight: 700; font-size: 13px; }
+.soil-opacity { display: inline-flex; align-items: center; gap: 6px; color: var(--color-neutral-700); }
+.soil-opacity input { width: 90px; accent-color: var(--color-accent); }
+.soil-legend { max-height: min(240px, 30vh); overflow-y: auto; background: #fff; border-radius: 4px; }
+.soil-legend img { display: block; max-width: 100%; height: auto; }
+.soil-layer-msg { color: var(--color-accent-700); }
+.soil-panel-note { color: var(--color-neutral-700); font-size: 11px; line-height: 1.4; }
 
 /* — panel — */
 .panel { flex: none; width: 100%; display: flex; flex-direction: column; background: var(--color-bg); }

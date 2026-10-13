@@ -16,7 +16,13 @@
     imagery: "color",     // "color" | "grayscale"
     exaggeration: 3,      // terrain exaggeration, 1–3
     showBelt: true,       // coffee belt shading + tropic lines
+    soilOpacity: 0.65,    // soil type overlay opacity when switched on
   };
+  // Soil type overlay: most probable WRB soil group from ISRIC SoilGrids, served as a WMS
+  // (map images drawn on request), so it drapes over both the flat map and the 3D terrain.
+  const SOIL_WMS = "https://maps.isric.org/mapserv?map=/map/wrb.map&SERVICE=WMS&VERSION=1.3.0";
+  const SOIL_TILES = `${SOIL_WMS}&REQUEST=GetMap&LAYERS=MostProbable&STYLES=&CRS=EPSG:3857&BBOX={bbox-epsg-3857}&WIDTH=256&HEIGHT=256&FORMAT=image/png&TRANSPARENT=TRUE`;
+  const SOIL_LEGEND = `${SOIL_WMS}&REQUEST=GetLegendGraphic&LAYER=MostProbable&FORMAT=image/png&SLD_VERSION=1.1.0`;
   const ACCENT = "#c4274d", INK = "#201e1d";
   const wide = window.matchMedia("(min-width: 960px)").matches;
 
@@ -114,6 +120,10 @@
           tiles: ["https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png"],
           attribution: "Terrain © Mapzen, AWS Terrain Tiles",
         },
+        soil: {
+          type: "raster", tiles: [SOIL_TILES], tileSize: 256, minzoom: 0, maxzoom: 13,
+          attribution: "Soil types © ISRIC SoilGrids (CC BY 4.0)",
+        },
         belt: { type: "geojson", data: beltGeo },
         tropics: { type: "geojson", data: tropicLines },
         regions: { type: "geojson", data: regionGeo },
@@ -122,6 +132,7 @@
       layers: [
         { id: "sat", type: "raster", source: "sat", paint: { "raster-saturation": CONFIG.imagery === "grayscale" ? -1 : 0, "raster-contrast": 0.08 } },
         { id: "hillshade", type: "hillshade", source: "dem", paint: { "hillshade-exaggeration": 0.25, "hillshade-shadow-color": INK } },
+        { id: "soil", type: "raster", source: "soil", layout: { visibility: "none" }, paint: { "raster-opacity": CONFIG.soilOpacity, "raster-fade-duration": 150 } },
         { id: "belt", type: "fill", source: "belt", layout: { visibility: beltVis }, paint: { "fill-color": "rgba(196,39,77,0.07)" } },
         { id: "tropics", type: "line", source: "tropics", layout: { visibility: beltVis }, paint: { "line-color": ACCENT, "line-width": 2, "line-dasharray": [3, 2] } },
         { id: "regions", type: "circle", source: "regions", paint: {
@@ -144,6 +155,28 @@
   };
   map.once("styledata", () => setTimeout(collapseAttrib, 0));
   map.on("load", () => { collapseAttrib(); map.setTerrain({ source: "dem", exaggeration: CONFIG.exaggeration }); });  new ResizeObserver(() => map.resize()).observe($("map"));
+
+  // ---------- Soil type overlay ----------
+  // Off by default, so no soil images are requested until someone switches it on.
+  let soilErrors = 0;
+  $("soilToggle").addEventListener("click", () => {
+    const on = $("soilToggle").getAttribute("aria-checked") !== "true";
+    $("soilToggle").setAttribute("aria-checked", String(on));
+    $("soilPanel").hidden = !on;
+    if (on && !$("soilLegend").src) $("soilLegend").src = SOIL_LEGEND;
+    soilErrors = 0; $("soilLayerMsg").hidden = true;
+    const apply = () => map.setLayoutProperty("soil", "visibility", on ? "visible" : "none");
+    map.isStyleLoaded() ? apply() : map.once("load", apply);
+  });
+  $("soilOpacity").addEventListener("input", e => {
+    if (map.getLayer("soil")) map.setPaintProperty("soil", "raster-opacity", +e.target.value / 100);
+  });
+  $("soilLegend").addEventListener("error", () => { $("soilLegend").parentElement.hidden = true; });
+  map.on("error", e => {
+    if (e.sourceId !== "soil" || ++soilErrors < 3) return;
+    $("soilLayerMsg").textContent = "The soil map service isn't responding right now. Try again later.";
+    $("soilLayerMsg").hidden = false;
+  });
 
   map.on("mouseenter", "regions", e => {
     map.getCanvas().style.cursor = "pointer";

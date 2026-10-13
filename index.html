@@ -25,13 +25,27 @@
         <button id="hintBtn" class="hint-btn" type="button" aria-label="Hide help" aria-expanded="true">?</button>
         <p class="hint-text">Pan, zoom and tilt the terrain (right-drag or two-finger drag), then tap any point for its altitude, weather history and soil.</p>
       </div>
-      <div id="regionCard" class="region-card" hidden>
-        <div id="regionCardName" class="region-card-name"></div>
-        <div id="regionCardCountry" class="region-card-country"></div>
-      </div>
-      <div class="legend">
-        <span class="legend-item" data-tip="coffee-belt"><span class="legend-belt"></span><span class="term">Coffee belt</span></span>
-        <span class="legend-item"><span class="legend-dot"></span>Known origins</span>
+      <div class="map-stack">
+        <div id="regionCard" class="region-card" hidden>
+          <div id="regionCardName" class="region-card-name"></div>
+          <div id="regionCardCountry" class="region-card-country"></div>
+        </div>
+        <div id="soilPanel" class="soil-panel" hidden>
+          <div class="soil-panel-head">
+            <span class="soil-panel-title term" data-tip="soil-overlay">Soil types</span>
+            <label class="soil-opacity"><span>Opacity</span><input id="soilOpacity" type="range" min="10" max="100" step="5" value="65" aria-label="Soil layer opacity"></label>
+          </div>
+          <p id="soilLayerMsg" class="soil-layer-msg" hidden></p>
+          <div class="soil-legend">
+            <img id="soilLegend" alt="Colour legend for the soil type map: most probable WRB soil group" loading="lazy">
+          </div>
+          <p class="soil-panel-note">Most likely soil group, ISRIC SoilGrids (250 m). Tap a point for details.</p>
+        </div>
+        <div class="legend">
+          <span class="legend-item" data-tip="coffee-belt"><span class="legend-belt"></span><span class="term">Coffee belt</span></span>
+          <span class="legend-item"><span class="legend-dot"></span>Known origins</span>
+          <button id="soilToggle" class="soil-toggle" type="button" role="switch" aria-checked="false" data-tip="soil-overlay"><span class="soil-switch" aria-hidden="true"></span>Soil types</button>
+        </div>
       </div>
     </section>
 

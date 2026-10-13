@@ -10,6 +10,12 @@ window.GLOSSARY = (function () {
       why: "Almost all coffee grows here, because the plant cannot survive frost. Near the equator arabica needs altitude to stay cool enough; robusta grows in the hot lowlands. Towards the edges of the belt, as in Brazil, good coffee grows lower down.",
     },
 
+    "soil-overlay": {
+      title: "Soil types map",
+      what: "Colours the map by the most likely soil group at each spot, from ISRIC SoilGrids, a global soil map with about 250 m detail. It works on both the flat map and the 3D terrain; use the slider to see the satellite image through it.",
+      why: "Shows how soils change across a region, for example the red Nitisols of the East African highlands or the volcanic Andosols of Central America. It is a modelled estimate: tap a point for its soil details in the panel, and test real fields before planting.",
+    },
+
     // ---- Location ----
     "region": {
       title: "Region",
