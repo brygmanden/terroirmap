@@ -489,9 +489,14 @@
     tip.hidden = true;
   }
   function showTip(el) {
-    const text = window.GLOSSARY.get(el.dataset.tip);
-    if (!text || !el.isConnected) return;
-    tip.textContent = text;
+    const g = window.GLOSSARY.get(el.dataset.tip);
+    if (!g || !el.isConnected) return;
+    const part = (tag, cls, text) => Object.assign(document.createElement(tag), { className: cls, textContent: text });
+    tip.replaceChildren(
+      part("strong", "tip-title", g.title),
+      part("span", "tip-h", "What it is"), part("p", "tip-p", g.what),
+      part("span", "tip-h", "What it means for coffee"), part("p", "tip-p", g.why),
+    );
     tip.hidden = false;
     el.setAttribute("aria-describedby", "tip");
     // Below the term, or above it when there is no room; kept inside the viewport.
