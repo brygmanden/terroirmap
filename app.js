@@ -229,13 +229,17 @@
           "circle-color": ["match", ["get", "t"], "m", FARM_COLORS.m, "a", FARM_COLORS.a, FARM_COLORS.f],
           "circle-stroke-color": "#ffffff", "circle-stroke-width": ["interpolate", ["linear"], ["zoom"], 3, 0.4, 10, 1.2],
           "circle-opacity": ["interpolate", ["linear"], ["zoom"], 3, 0.7, 7, 1] } },
+        // Styled like the selected region's name label: a dark rounded box with light text, name in bold and
+        // (farms only) the varieties in a smaller line underneath, sitting just above the dot.
         { id: "farm-labels", type: "symbol", source: "farms", minzoom: 9, layout: {
           "text-field": ["case", ["has", "v"],
-            ["format", ["get", "n"], {}, "\n", {}, ["get", "v"], { "font-scale": 0.85, "text-font": ["literal", ["Noto Sans Regular"]] }],
+            ["format", ["get", "n"], {}, "\n", {}, ["get", "v"], { "font-scale": 0.79, "text-font": ["literal", ["Noto Sans Regular"]], "text-color": "rgba(249,249,249,0.8)" }],
             ["get", "n"]],
-          "text-font": ["Noto Sans Medium"], "text-size": 12, "text-anchor": "top", "text-offset": [0, 0.7],
-          "text-max-width": 11, "text-padding": 3 },
-          paint: { "text-color": "#f9f9f9", "text-halo-color": "rgba(32,30,29,0.9)", "text-halo-width": 1.4 } },
+          "text-font": ["Noto Sans Medium"], "text-size": 14, "text-line-height": 1.15, "text-max-width": 14,
+          "text-anchor": "bottom", "text-offset": [0, -1.3], "text-justify": "center",
+          "icon-image": "label-bg", "icon-text-fit": "both", "icon-text-fit-padding": [5, 10, 6, 10], "icon-anchor": "bottom",
+          "text-padding": 4 },
+          paint: { "text-color": "#f9f9f9" } },
         { id: "regions", type: "circle", source: "regions", paint: {
           "circle-radius": ["interpolate", ["linear"], ["zoom"], 2, 4, 8, 7], "circle-color": ACCENT,
           "circle-stroke-color": "#ffffff", "circle-stroke-width": 2 } },
@@ -245,6 +249,19 @@
           "circle-radius": 4, "circle-color": INK, "circle-stroke-color": "#ffffff", "circle-stroke-width": 1 } },
       ],
     },
+  });
+  // Rounded dark background for farm labels (matches .region-label), drawn at 2x for sharp edges and
+  // stretched around each label's text by "icon-text-fit".
+  map.on("styleimagemissing", e => {
+    if (e.id !== "label-bg" || map.hasImage("label-bg")) return;
+    const size = 48, r = 12, c = document.createElement("canvas");
+    c.width = c.height = size;
+    const ctx = c.getContext("2d");
+    ctx.fillStyle = "rgba(32,30,29,0.82)";
+    ctx.beginPath(); ctx.roundRect(0, 0, size, size, r); ctx.fill();
+    map.addImage("label-bg", ctx.getImageData(0, 0, size, size), {
+      pixelRatio: 2, stretchX: [[r, size - r]], stretchY: [[r, size - r]],
+    });
   });
   map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "top-right");
   map.addControl(new maplibregl.TerrainControl({ source: "dem", exaggeration: CONFIG.exaggeration }), "top-right");
