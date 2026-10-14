@@ -24,6 +24,7 @@
   const SOIL_TILES = `${SOIL_WMS}&REQUEST=GetMap&LAYERS=MostProbable&STYLES=&CRS=EPSG:3857&BBOX={bbox-epsg-3857}&WIDTH=256&HEIGHT=256&FORMAT=image/png&TRANSPARENT=TRUE`;
   const SOIL_LEGEND = `${SOIL_WMS}&REQUEST=GetLegendGraphic&LAYER=MostProbable&FORMAT=image/png&SLD_VERSION=1.1.0`;
   const ACCENT = "#c4274d", INK = "#201e1d", OUTLINE = "#f9f9f9";
+  const FARM_COLORS = { f: "#3b9e5d", m: "#e0a526", a: "#4f7be8" }; // farm, mill, auction (also in style.css legend)
   const wide = window.matchMedia("(min-width: 960px)").matches;
 
   const DEFAULT_REGION = R.find(r => /^Yirgacheffe/.test(r.name)) || R[0];
@@ -188,6 +189,8 @@
     attributionControl: { compact: true },
     style: {
       version: 8,
+      // Self-hosted map fonts (Noto Sans, SIL OFL) for the farm labels; Chinese characters use the system font.
+      glyphs: new URL("assets/fonts/", location.href).href + "{fontstack}/{range}.pbf",
       sources: {
         sat: {
           type: "raster", tileSize: 256, maxzoom: 18,
@@ -207,6 +210,7 @@
         tropics: { type: "geojson", data: tropicLines },
         regions: { type: "geojson", data: regionGeo },
         picked: { type: "geojson", data: pointGeo(state.lat, state.lon) },
+        farms: { type: "geojson", data: new URL("data/farms.geojson", location.href).href },
         outline: { type: "geojson", data: { type: "FeatureCollection", features: [] }, attribution: "Region outlines: © OpenStreetMap contributors (ODbL) via Overture Maps, IBGE, geoBoundaries" },
       },
       layers: [
@@ -218,6 +222,20 @@
         // Selected region's outline: a faint dark casing keeps the light dashed line readable on bright imagery.
         { id: "outline-casing", type: "line", source: "outline", layout: { "line-join": "round" }, paint: { "line-color": "rgba(32,30,29,0.45)", "line-width": 4 } },
         { id: "outline", type: "line", source: "outline", layout: { "line-join": "round" }, paint: { "line-color": OUTLINE, "line-width": 2, "line-dasharray": [3, 2] } },
+        // Farms, mills and auctions: coloured dots, with name (+ variety for farms) labels once zoomed in.
+        // Labels that would overlap are hidden automatically, so more appear as you zoom in.
+        { id: "farms", type: "circle", source: "farms", minzoom: 3, paint: {
+          "circle-radius": ["interpolate", ["linear"], ["zoom"], 3, 1.6, 8, 3.5, 13, 6],
+          "circle-color": ["match", ["get", "t"], "m", FARM_COLORS.m, "a", FARM_COLORS.a, FARM_COLORS.f],
+          "circle-stroke-color": "#ffffff", "circle-stroke-width": ["interpolate", ["linear"], ["zoom"], 3, 0.4, 10, 1.2],
+          "circle-opacity": ["interpolate", ["linear"], ["zoom"], 3, 0.7, 7, 1] } },
+        { id: "farm-labels", type: "symbol", source: "farms", minzoom: 9, layout: {
+          "text-field": ["case", ["has", "v"],
+            ["format", ["get", "n"], {}, "\n", {}, ["get", "v"], { "font-scale": 0.85, "text-font": ["literal", ["Noto Sans Regular"]] }],
+            ["get", "n"]],
+          "text-font": ["Noto Sans Medium"], "text-size": 12, "text-anchor": "top", "text-offset": [0, 0.7],
+          "text-max-width": 11, "text-padding": 3 },
+          paint: { "text-color": "#f9f9f9", "text-halo-color": "rgba(32,30,29,0.9)", "text-halo-width": 1.4 } },
         { id: "regions", type: "circle", source: "regions", paint: {
           "circle-radius": ["interpolate", ["linear"], ["zoom"], 2, 4, 8, 7], "circle-color": ACCENT,
           "circle-stroke-color": "#ffffff", "circle-stroke-width": 2 } },
@@ -280,6 +298,19 @@
     $("regionCard").hidden = false;
   });
   map.on("mouseleave", "regions", () => { map.getCanvas().style.cursor = ""; $("regionCard").hidden = true; });
+
+  // Hovering a farm, mill or auction shows its name, type, variety and how exact its position is.
+  const FARM_TYPE = { f: "Farm", m: "Mill", a: "Auction" };
+  const FARM_PREC = { e: "exact location", t: "approximate location (town)", m: "approximate location (municipality)", s: "approximate location (state centroid)" };
+  map.on("mousemove", "farms", e => {
+    if (map.queryRenderedFeatures(e.point, { layers: ["regions"] }).length) return;
+    map.getCanvas().style.cursor = "pointer";
+    const p = e.features[0].properties;
+    $("regionCardName").textContent = p.n;
+    $("regionCardCountry").textContent = [FARM_TYPE[p.t], p.v, FARM_PREC[p.p]].filter(Boolean).join(" · ");
+    $("regionCard").hidden = false;
+  });
+  map.on("mouseleave", "farms", () => { map.getCanvas().style.cursor = ""; $("regionCard").hidden = true; });
 
   map.on("click", e => {
     const hit = map.queryRenderedFeatures(e.point, { layers: ["regions"] })[0];

@@ -120,6 +120,10 @@ a:hover { color: var(--color-accent); }
 .legend-item { display: inline-flex; align-items: center; gap: 6px; }
 .legend-belt { width: 16px; height: 0; border-top: 2px dashed var(--color-accent); }
 .legend-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--color-accent); box-shadow: 0 0 0 2px #fff, 0 0 0 3px var(--color-text); }
+.legend-pt { width: 9px; height: 9px; border-radius: 50%; box-shadow: 0 0 0 1.5px #fff, 0 0 0 2.5px rgba(32, 30, 29, .35); }
+.legend-pt.farm { background: #3b9e5d; }
+.legend-pt.mill { background: #e0a526; }
+.legend-pt.auction { background: #4f7be8; }
 
 .map-loading {
   display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px 6px 8px;

@@ -30,6 +30,8 @@ Any static host works too, for example GitHub Pages, Netlify or Cloudflare Pages
 | `climate.js` | Pure calculations: monthly aggregation, Köppen–Geiger class, altitude effects, coffee fit. Also works in Node (`require('./climate.js')`) |
 | `glossary.js` | Plain-language explanations for the hover tooltips (terms, abbreviations, soil groups, Köppen letters). Elements opt in with `data-tip="key"` |
 | `data/outlines/<CC>.json` | Region outlines, one file per country (ISO code), loaded only when a region in that country is selected |
+| `data/farms.geojson` | 3,959 coffee farms, mills and auctions with a location (from `global_coffee_farms_mills_auctions.csv`): type, name, up to three varieties (farms only) and how exact the position is. Contact details and owner names are left out |
+| `assets/fonts/` | Noto Sans (SIL Open Font License) map-label fonts, Latin, Thai and punctuation ranges only |
 | `regions.js` | 389 coffee regions in 60 countries, sorted by country then region: name, other names, main species, label point and the admin units behind each outline |
 | `docs/original-app.md` | Notes on the original app's interface |
 
@@ -80,3 +82,9 @@ Before bigger changes a backup branch is created, e.g. `backup/before-soil-overl
 
 - Outlines are administrative units, or unions of them where a coffee region (a mountain range, origin brand or GI) has no boundary of its own. Sources: Overture Maps divisions (OpenStreetMap-derived, ODbL); IBGE municipal boundaries for Brazil; geoBoundaries (CC BY 4.0) for Huye and Marcala. Simplified to about 300 m, with large lakes cut out.
 - Known limits: Yirgacheffe is drawn as Gedeo zone and Limu/Agaro/Gera as Jimma zone (no woreda outlines); Vietnam follows the 2025 province mergers; Burundi uses pre-2025 provinces; Kona and Kaʻū are the whole of Hawaiʻi County; Blue Mountains is its three parishes.
+
+## Farms, mills and auctions
+
+`data/farms.geojson` is generated from `global_coffee_farms_mills_auctions.csv` (4,135 rows; 176 without a usable location are left out, including most auctions, which run online). Farms are green, mills amber, auctions blue; names (and, for farms, varieties) appear from zoom 9, and overlapping labels are hidden automatically.
+
+Only 136 positions are exact; most are the centre of the farm's town or state. Entries sharing the same point are fanned out on a small spiral (about 100 m–1.5 km) so each dot can be seen and hovered. The spread is a display aid, not a real position; the hover card says how exact each one is.

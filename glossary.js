@@ -16,6 +16,22 @@ window.GLOSSARY = (function () {
       why: "Shows how soils change across a region, for example the red Nitisols of the East African highlands or the volcanic Andosols of Central America. It is a modelled estimate: tap a point for its soil details in the panel, and test real fields before planting.",
     },
 
+    "farms": {
+      title: "Coffee farms",
+      what: "Green dots are known coffee farms (3,632) from global records such as competition results. Zoom in to see their names and, where known, the varieties they grow.",
+      why: "See where award-winning and specialty farms cluster within a region. Most positions are approximate: a farm is usually placed at its town or state, and farms sharing a spot are fanned out slightly so each can be seen. Hover over a dot for how exact it is.",
+    },
+    "mills": {
+      title: "Coffee mills",
+      what: "Amber dots are wet mills, washing stations and dry mills (320) where harvested cherries are processed.",
+      why: "Many smallholders sell cherries to a nearby station rather than processing them themselves, so a station often represents hundreds of farms around it. Positions are mostly approximate.",
+    },
+    "auctions": {
+      title: "Coffee auctions",
+      what: "Blue dots are coffee auctions and competitions with a known location, such as national Cup of Excellence programmes.",
+      why: "Auctions and competitions are where many of the farms on the map earned their scores and recognition. Most auctions run online, so only a few have a place on the map.",
+    },
+
     // ---- Location ----
     "region": {
       title: "Region",
