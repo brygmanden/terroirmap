@@ -21,8 +21,27 @@
   // Soil type overlay: most probable WRB soil group from ISRIC SoilGrids, served as a WMS
   // (map images drawn on request), so it drapes over both the flat map and the 3D terrain.
   const SOIL_WMS = "https://maps.isric.org/mapserv?map=/map/wrb.map&SERVICE=WMS&VERSION=1.3.0";
-  const SOIL_TILES = `${SOIL_WMS}&REQUEST=GetMap&LAYERS=MostProbable&STYLES=&CRS=EPSG:3857&BBOX={bbox-epsg-3857}&WIDTH=256&HEIGHT=256&FORMAT=image/png&TRANSPARENT=TRUE`;
+  const SOIL_GETMAP = `${SOIL_WMS}&REQUEST=GetMap&LAYERS=MostProbable&CRS=EPSG:3857&BBOX={bbox-epsg-3857}&WIDTH=256&HEIGHT=256&FORMAT=image/png&TRANSPARENT=TRUE`;
   const SOIL_LEGEND = `${SOIL_WMS}&REQUEST=GetLegendGraphic&LAYER=MostProbable&FORMAT=image/png&SLD_VERSION=1.1.0`;
+  // SoilGrids "MostProbable" class values 0–29, in its (alphabetical, WRB 2006) order.
+  const SOIL_CODES = ["Acrisols", "Albeluvisols", "Alisols", "Andosols", "Arenosols", "Calcisols", "Cambisols", "Chernozems",
+    "Cryosols", "Durisols", "Ferralsols", "Fluvisols", "Gleysols", "Gypsisols", "Histosols", "Kastanozems", "Leptosols",
+    "Lixisols", "Luvisols", "Nitisols", "Phaeozems", "Planosols", "Plinthosols", "Podzols", "Regosols", "Solonchaks",
+    "Solonetz", "Stagnosols", "Umbrisols", "Vertisols"];
+  // Soil type info and colours (Prof Steven Abbott, soils.js). Albeluvisols were renamed Retisols in WRB 2014.
+  const SOILS = new Map(window.SOIL_TYPES.map(t => [t.name, t]));
+  const soilInfo = name => {
+    const key = [...SOILS.keys()].find(g => String(name).includes(g));
+    return key ? SOILS.get(key) : /Albeluvisol/.test(name) ? SOILS.get("Retisols") : null;
+  };
+  // Ask ISRIC's map server to draw the soil map in Abbott's colours, by sending a style (SLD) with each request.
+  const soilSld = '<StyledLayerDescriptor version="1.0.0" xmlns="http://www.opengis.net/sld" xmlns:ogc="http://www.opengis.net/ogc">'
+    + "<NamedLayer><Name>MostProbable</Name><UserStyle><FeatureTypeStyle><Rule><RasterSymbolizer><ColorMap>"
+    + SOIL_CODES.map((n, i) => `<ColorMapEntry color="${soilInfo(n).colour}" quantity="${i}" label="${n}"/>`).join("")
+    + '<ColorMapEntry color="#000000" quantity="30" opacity="0"/>'
+    + "</ColorMap></RasterSymbolizer></Rule></FeatureTypeStyle></UserStyle></NamedLayer></StyledLayerDescriptor>";
+  const SOIL_TILES = `${SOIL_GETMAP}&STYLES=&SLD_BODY=${encodeURIComponent(soilSld)}`;
+  const SOIL_TILES_ISRIC = `${SOIL_GETMAP}&STYLES=`; // fallback: ISRIC's own colours
   const ACCENT = "#c4274d", INK = "#201e1d", OUTLINE = "#f9f9f9";
   const FARM_COLORS = { f: "#3b9e5d", m: "#e0a526", a: "#4f7be8" }; // farm, mill, auction (also in style.css legend)
   const wide = window.matchMedia("(min-width: 960px)").matches;
@@ -287,12 +306,24 @@
 
   // ---------- Soil type overlay ----------
   // Off by default, so no soil images are requested until someone switches it on.
-  let soilErrors = 0;
+  // Legend: the 30 groups SoilGrids maps, grouped by theme; each opens the soil details popup.
+  $("soilLegendList").innerHTML = (() => {
+    const shown = SOIL_CODES.map(soilInfo);
+    const themes = new Map(); // theme -> soils, in order of first appearance in the WRB key
+    for (const t of window.SOIL_TYPES.filter(t => shown.includes(t))) {
+      if (!themes.has(t.theme)) themes.set(t.theme, []);
+      themes.get(t.theme).push(t);
+    }
+    let html = "";
+    for (const [theme, list] of themes) html += `<div class="soil-legend-theme">${esc(theme)}</div>` + list.map(t => `<button type="button" class="soil-legend-item" data-soil="${esc(t.name)}">`
+        + `<span class="soil-swatch" style="background:${t.colour}"></span>${esc(t.name)}${t.formerly ? ` <span class="soil-legend-aka">(${esc(t.formerly)})</span>` : ""}</button>`).join("");
+    return html;
+  })();
+  let soilErrors = 0, soilFallback = false;
   $("soilToggle").addEventListener("click", () => {
     const on = $("soilToggle").getAttribute("aria-checked") !== "true";
     $("soilToggle").setAttribute("aria-checked", String(on));
     $("soilPanel").hidden = !on;
-    if (on && !$("soilLegend").src) $("soilLegend").src = SOIL_LEGEND;
     soilErrors = 0; $("soilLayerMsg").hidden = true;
     const apply = () => map.setLayoutProperty("soil", "visibility", on ? "visible" : "none");
     map.isStyleLoaded() ? apply() : map.once("load", apply);
@@ -300,10 +331,21 @@
   $("soilOpacity").addEventListener("input", e => {
     if (map.getLayer("soil")) map.setPaintProperty("soil", "raster-opacity", +e.target.value / 100);
   });
-  $("soilLegend").addEventListener("error", () => { $("soilLegend").parentElement.hidden = true; });
+  $("soilLegendImg").addEventListener("error", () => { $("soilLegendImg").hidden = true; });
+  // If ISRIC's server refuses the custom colours, fall back to its own colours and legend image.
   map.on("error", e => {
-    if (e.sourceId !== "soil" || ++soilErrors < 3) return;
-    $("soilLayerMsg").textContent = "The soil map service isn't responding right now. Try again later.";
+    if (e.sourceId !== "soil") return;
+    if (soilFallback && /SLD_BODY/.test(e.error && e.error.url || "")) return; // late failures of custom-colour tiles
+    if (++soilErrors < 3) return;
+    if (!soilFallback) {
+      soilFallback = true; soilErrors = 0;
+      map.getSource("soil").setTiles([SOIL_TILES_ISRIC]);
+      $("soilLegendList").hidden = true;
+      $("soilLegendImg").src = SOIL_LEGEND; $("soilLegendImg").hidden = false;
+      $("soilLayerMsg").textContent = "Showing ISRIC's own colours: the soil map service didn't accept the custom colours.";
+    } else {
+      $("soilLayerMsg").textContent = "The soil map service isn't responding right now. Try again later.";
+    }
     $("soilLayerMsg").hidden = false;
   });
 
@@ -702,7 +744,7 @@
     const probs = cls.status === "fulfilled" ? (cls.value.wrb_class_probability || []).filter(p => p[1] > 0) : [];
     if (probs.length) {
       $("soilTypes").innerHTML = probs.map(([name, p]) =>
-        `<div class="prob"><span class="prob-name term" data-tip="wrb.${esc(name)}">${esc(name)}</span><span class="prob-track"><span class="prob-fill" style="width:${+p}%"></span></span><span class="prob-pct">${+p}%</span></div>`
+        `<div class="prob"><button type="button" class="prob-name soil-link" data-soil="${esc(name)}" data-tip="wrb.${esc(name)}">${esc(name)}</button><span class="prob-track"><span class="prob-fill" style="width:${+p}%"></span></span><span class="prob-pct">${+p}%</span></div>`
       ).join("");
     } else {
       typeMsg = cls.status === "fulfilled" ? "No soil classification here." : "Soil classification unavailable right now.";
@@ -760,6 +802,58 @@
   document.addEventListener("keydown", e => { if (e.key === "Escape") hideTip(); });
   document.addEventListener("pointerdown", hideTip);
   document.addEventListener("scroll", hideTip, true);
+
+  // ---------- Soil type details popup ----------
+  // Any element with data-soil="<group name>" opens it: the legend, and the soil type list in the panel.
+  const SUIT_CLASS = { "Important for coffee": "good", "Sometimes used for coffee": "some", "Rarely used for coffee": "rare", "Generally unsuitable for coffee": "no" };
+  function soilProfile(t) {
+    const total = Math.max(...t.horizons.map(h => h.bottom));
+    const bar = t.horizons.map(h =>
+      `<div class="sp-layer${h.abrupt ? " abrupt" : ""}" style="height:${(h.bottom - h.top) / total * 100}%;background:${h.colour}" title="${esc(h.h)}: ${esc(h.desc)}"><span>${esc(h.h)}</span></div>`).join("");
+    const ticks = [0, 50, 100, 150].filter(d => d <= total).map(d => `<span style="top:${d / total * 100}%">${d}</span>`).join("");
+    const list = t.horizons.map(h =>
+      `<li><span class="sp-chip" style="background:${h.colour}"></span><span class="sp-code">${esc(h.h)}</span>`
+      + `<span class="sp-depth">${h.top}–${h.bottom} cm</span><span class="sp-desc">${esc(h.desc)}</span></li>`).join("");
+    return `<div class="sp"><div class="sp-scale" aria-hidden="true">${ticks}</div><div class="sp-bar" aria-hidden="true">${bar}</div><ol class="sp-list">${list}</ol></div>`;
+  }
+  function openSoil(name) {
+    const t = soilInfo(name);
+    if (!t) return;
+    hideTip();
+    const fact = (k, v) => `<div class="sd-fact"><span class="label">${k}</span><span>${esc(v)}</span></div>`;
+    $("soilDlgBody").innerHTML = `
+      <header class="sd-head">
+        <span class="sd-swatch" style="background:${t.colour}"></span>
+        <div>
+          <p class="sd-theme">${esc(t.theme)}</p>
+          <h2 id="soilDlgTitle">${esc(t.name)}</h2>
+          ${t.formerly ? `<p class="sd-formerly">Formerly ${esc(t.formerly)}</p>` : ""}
+        </div>
+      </header>
+      <p class="sd-what">${esc(t.what)}</p>
+      <section class="sd-coffee ${SUIT_CLASS[t.suitability] || ""}">
+        <span class="sd-badge">${esc(t.suitability)}</span>
+        <p>${esc(t.coffee)}</p>
+      </section>
+      <div class="sd-facts">${fact("Drainage", t.drainage)}${fact("Nutrients", t.nutrients)}${fact("Acidity", t.acidity)}${fact("Depth", t.depth)}</div>
+      <section><h3 class="label">Typical profile (cm)</h3>${soilProfile(t)}</section>
+      <section><h3 class="label">How to recognise it</h3><p>${esc(t.recognise)}</p></section>
+      ${t.question ? `<section><h3 class="label">Key question</h3><p class="sd-question">${esc(t.question)}</p></section>` : ""}
+      <details class="sd-more"><summary>Formal definition and name</summary>
+        <p>${esc(t.definition)}</p><p class="sd-origin">${esc(t.origin)}</p></details>
+      <p class="sd-source">Soil information: Prof Steven Abbott. Map: ISRIC SoilGrids.</p>`;
+    const dlg = $("soilDialog");
+    if (!dlg.open) dlg.showModal();
+    $("soilDlgBody").scrollTop = 0;
+    $("soilDlgClose").focus();
+  }
+  document.addEventListener("click", e => {
+    const el = e.target.closest("[data-soil]");
+    if (el) openSoil(el.dataset.soil);
+  });
+  $("soilDlgClose").addEventListener("click", () => $("soilDialog").close());
+  // Clicking the dimmed backdrop (outside the card) also closes it; Escape is handled by <dialog>.
+  $("soilDialog").addEventListener("click", e => { if (e.target === $("soilDialog")) $("soilDialog").close(); });
 
   // ---------- Start ----------
   renderReadouts();

@@ -32,6 +32,7 @@ Any static host works too, for example GitHub Pages, Netlify or Cloudflare Pages
 | `data/outlines/<CC>.json` | Region outlines, one file per country (ISO code), loaded only when a region in that country is selected |
 | `data/farms.geojson` | 3,959 coffee farms, mills and auctions with a location (from `global_coffee_farms_mills_auctions.csv`): type, name, up to three varieties (farms only) and how exact the position is. Contact details and owner names are left out |
 | `assets/fonts/` | Noto Sans (SIL Open Font License) map-label fonts, Latin, Thai and punctuation ranges only |
+| `soils.js` | The 32 WRB soil groups from Prof Steven Abbott: map colour, theme, descriptions, drainage/nutrients/acidity/depth, coffee suitability and a typical horizon profile. Drives the soil map colours, legend, tooltips and the soil details popup |
 | `regions.js` | 389 coffee regions in 60 countries, sorted by country then region: name, other names, main species, label point and the admin units behind each outline |
 | `docs/original-app.md` | Notes on the original app's interface |
 
@@ -88,3 +89,11 @@ Before bigger changes a backup branch is created, e.g. `backup/before-soil-overl
 `data/farms.geojson` is generated from `global_coffee_farms_mills_auctions.csv` (4,135 rows; 176 without a usable location are left out, including most auctions, which run online). Farms are green, mills amber, auctions blue; names (and, for farms, varieties) appear from zoom 9, and overlapping labels are hidden automatically.
 
 Only 136 positions are exact; most are the centre of the farm's town or state. Entries sharing the same point are fanned out on a small spiral (about 100 m–1.5 km) so each dot can be seen and hovered. The spread is a display aid, not a real position; the hover card says how exact each one is.
+
+## Soil types
+
+Soil colours and descriptions come from Prof Steven Abbott's soil types data (`soil_types.csv`, `soil_horizons.csv`), built into `soils.js`. The map uses each group's `colour_hex`.
+
+- **Map colours:** the overlay is ISRIC's SoilGrids "MostProbable" WMS layer. Each map image request carries a style (`SLD_BODY`) that maps SoilGrids' class values 0–29 (alphabetical WRB 2006 names) to Abbott's colours; SoilGrids' Albeluvisols use the colour of Retisols, their WRB 2014 name. If the server rejects the custom style, the app falls back to ISRIC's own colours and legend image and says so.
+- **Legend:** the 30 groups SoilGrids maps, grouped by Abbott's themes. Anthrosols and Technosols are in the data and popup but never appear on the SoilGrids map.
+- **Soil details popup:** clicking a soil type in the legend or in the panel's soil type list opens a popup with the description, coffee suitability, drainage/nutrients/acidity/depth, a typical profile, how to recognise it and the formal definition. Close with ×, Escape or by clicking outside.

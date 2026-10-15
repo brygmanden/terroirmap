@@ -42,9 +42,10 @@
           </div>
           <p id="soilLayerMsg" class="soil-layer-msg" hidden></p>
           <div class="soil-legend">
-            <img id="soilLegend" alt="Colour legend for the soil type map: most probable WRB soil group" loading="lazy">
+            <div id="soilLegendList" class="soil-legend-list" aria-label="Soil type colours"></div>
+            <img id="soilLegendImg" alt="Colour legend for the soil type map: most probable WRB soil group" hidden>
           </div>
-          <p class="soil-panel-note">Most likely soil group, ISRIC SoilGrids (250 m). Tap a point for details.</p>
+          <p class="soil-panel-note">Most likely soil group from ISRIC SoilGrids (250 m), in Prof Steven Abbott's colours. Click a soil type for details.</p>
         </div>
         <div class="legend">
           <span class="legend-item" data-tip="coffee-belt"><span class="legend-belt"></span><span class="term">Coffee belt</span></span>
@@ -142,9 +143,18 @@
 
 <div id="tip" class="tip" role="tooltip" hidden></div>
 
+<!-- Soil type details: opens when a soil type is clicked anywhere in the app. -->
+<dialog id="soilDialog" class="soil-dialog" aria-labelledby="soilDlgTitle">
+  <button id="soilDlgClose" class="soil-dlg-close" type="button" aria-label="Close soil details">
+    <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M2 2l10 10M12 2L2 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+  </button>
+  <div id="soilDlgBody" class="soil-dlg-scroll"></div>
+</dialog>
+
 <script src="https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
 <script src="regions.js"></script>
 <script src="climate.js"></script>
+<script src="soils.js"></script>
 <script src="glossary.js"></script>
 <script src="app.js"></script>
 </body>

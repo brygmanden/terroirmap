@@ -330,7 +330,11 @@ window.GLOSSARY = (function () {
   function get(key) {
     if (tips[key]) return tips[key];
     if (key.startsWith("wrb.")) {
+      // Prefer Prof Steven Abbott's soil descriptions (soils.js); click a soil name for the full details.
       const name = key.slice(4);
+      const types = window.SOIL_TYPES || [];
+      const t = types.find(t => name.includes(t.name)) || (/Albeluvisol/.test(name) && types.find(t => t.name === "Retisols"));
+      if (t) return { title: name, what: t.what, why: `${t.suitability}. ${t.coffee} Click for full details.` };
       const group = Object.keys(wrb).find(g => name.includes(g));
       return group ? { title: name, what: wrb[group][0], why: wrb[group][1] } : null;
     }
