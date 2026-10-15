@@ -320,7 +320,38 @@
     return html;
   })();
   let soilErrors = 0, soilFallback = false;
+  // ---------- "Try the Soil Types Overlay" nudge ----------
+  // Shown once, 30 s after load, if the soil switch hasn't been used yet (and never again once it has).
+  // It closes by itself after 20 s, or when the switch, the bubble or its x is clicked.
+  const NUDGE_KEY = "terroirmap.soilOverlayUsed";
+  const soilUsedBefore = (() => { try { return localStorage.getItem(NUDGE_KEY) === "1"; } catch (e) { return false; } })();
+  const nudge = $("soilNudge");
+  function placeNudge() {
+    if (nudge.hidden) return;
+    const pane = nudge.parentElement.getBoundingClientRect(), b = $("soilToggle").getBoundingClientRect();
+    const w = nudge.offsetWidth, cx = b.left + b.width / 2 - pane.left;
+    const left = Math.max(8, Math.min(cx - w / 2, pane.width - w - 8));
+    nudge.style.left = left + "px";
+    // Sit above the whole legend (it wraps onto two lines on phones), pointing at the switch.
+    const legendTop = $("soilToggle").closest(".legend").getBoundingClientRect().top;
+    nudge.style.bottom = (pane.bottom - legendTop + 10) + "px";
+    $("soilNudgeArrow").style.left = (cx - left) + "px";
+  }
+  let nudgeHideTimer = null;
+  function hideNudge() { clearTimeout(nudgeTimer); clearTimeout(nudgeHideTimer); nudge.hidden = true; }
+  const nudgeTimer = soilUsedBefore ? null : setTimeout(() => {
+    if ($("soilToggle").getAttribute("aria-checked") === "true") return;
+    nudge.hidden = false;
+    placeNudge();
+    nudgeHideTimer = setTimeout(hideNudge, 20000);
+  }, 30000);
+  window.addEventListener("resize", placeNudge);
+  $("soilNudgeClose").addEventListener("click", hideNudge);
+  $("soilNudgeBody").addEventListener("click", () => { hideNudge(); $("soilToggle").click(); });
+
   $("soilToggle").addEventListener("click", () => {
+    hideNudge();
+    try { localStorage.setItem(NUDGE_KEY, "1"); } catch (e) { /* storage unavailable: fine */ }
     const on = $("soilToggle").getAttribute("aria-checked") !== "true";
     $("soilToggle").setAttribute("aria-checked", String(on));
     $("soilPanel").hidden = !on;

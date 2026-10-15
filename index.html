@@ -30,6 +30,17 @@
           <span class="spinner" aria-hidden="true"></span>Loading regional data…
         </div>
       </div>
+      <!-- Nudge shown after 30 s if the soil types switch hasn't been used. -->
+      <div id="soilNudge" class="soil-nudge" role="status" hidden>
+        <button id="soilNudgeClose" class="soil-nudge-close" type="button" aria-label="Dismiss">
+          <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M1.5 1.5l7 7M8.5 1.5l-7 7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+        </button>
+        <button id="soilNudgeBody" class="soil-nudge-body" type="button">
+          <strong>Try the Soil Types Overlay</strong>
+          <span>See what soil types are found in different areas and get in-depth information about them.</span>
+        </button>
+        <span id="soilNudgeArrow" class="soil-nudge-arrow" aria-hidden="true"></span>
+      </div>
       <div class="map-stack">
         <div id="regionCard" class="region-card" hidden>
           <div id="regionCardName" class="region-card-name"></div>

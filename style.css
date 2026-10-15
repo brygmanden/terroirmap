@@ -146,6 +146,29 @@ a:hover { color: var(--color-accent); }
 .region-label-name { font-weight: 700; font-size: 14px; }
 .region-label-country { font-size: 11px; opacity: .8; }
 
+/* "Try the Soil Types Overlay" speech bubble, pointing down at the switch */
+.soil-nudge {
+  position: absolute; z-index: 4; width: min(270px, calc(100% - 24px));
+  background: rgba(244, 244, 244, .85); /* #f4f4f4 at 85% */ backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  border-radius: 10px; box-shadow: 0 8px 24px rgba(32, 30, 29, .28);
+  animation: nudge-in .35s ease-out;
+}
+.soil-nudge-body {
+  display: grid; gap: 3px; width: 100%; padding: 10px 30px 11px 12px; border: 0; background: none;
+  font: inherit; font-size: 13px; line-height: 1.4; color: var(--color-text); text-align: left; cursor: pointer;
+}
+.soil-nudge-body strong { font-weight: 700; font-size: 14px; }
+.soil-nudge-close {
+  position: absolute; top: 6px; right: 6px; width: 22px; height: 22px; display: grid; place-items: center;
+  border: 0; border-radius: 50%; background: rgba(32, 30, 29, .08); color: var(--color-text); cursor: pointer;
+}
+.soil-nudge-close:hover { background: rgba(32, 30, 29, .16); }
+.soil-nudge-arrow {
+  position: absolute; top: 100%; width: 0; height: 0; transform: translateX(-50%);
+  border: 9px solid transparent; border-top-color: rgba(244, 244, 244, .85); border-bottom: 0;
+}
+@keyframes nudge-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
 /* soil type overlay */
 .soil-toggle {
   display: inline-flex; align-items: center; gap: 6px; padding: 2px 0; border: 0; background: none;
