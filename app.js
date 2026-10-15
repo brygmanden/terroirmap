@@ -840,8 +840,7 @@
       <section><h3 class="label">How to recognise it</h3><p>${esc(t.recognise)}</p></section>
       ${t.question ? `<section><h3 class="label">Key question</h3><p class="sd-question">${esc(t.question)}</p></section>` : ""}
       <details class="sd-more"><summary>Formal definition and name</summary>
-        <p>${esc(t.definition)}</p><p class="sd-origin">${esc(t.origin)}</p></details>
-      <p class="sd-source">Soil information: Prof Steven Abbott. Map: ISRIC SoilGrids.</p>`;
+        <p>${esc(t.definition)}</p><p class="sd-origin">${esc(t.origin)}</p></details>`;
     const dlg = $("soilDialog");
     if (!dlg.open) dlg.showModal();
     $("soilDlgBody").scrollTop = 0;
