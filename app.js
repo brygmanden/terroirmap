@@ -321,10 +321,9 @@
   })();
   let soilErrors = 0, soilFallback = false;
   // ---------- "Try the Soil Types Overlay" nudge ----------
-  // Shown once, 30 s after load, if the soil switch hasn't been used yet (and never again once it has).
+  // Shown on every visit, 30 s after load, if the soil switch hasn't been clicked yet.
   // It closes by itself after 20 s, or when the switch, the bubble or its x is clicked.
-  const NUDGE_KEY = "terroirmap.soilOverlayUsed";
-  const soilUsedBefore = (() => { try { return localStorage.getItem(NUDGE_KEY) === "1"; } catch (e) { return false; } })();
+  try { localStorage.removeItem("terroirmap.soilOverlayUsed"); } catch (e) { /* old "don't show again" flag; no longer used */ }
   const nudge = $("soilNudge");
   function placeNudge() {
     if (nudge.hidden) return;
@@ -339,7 +338,7 @@
   }
   let nudgeHideTimer = null;
   function hideNudge() { clearTimeout(nudgeTimer); clearTimeout(nudgeHideTimer); nudge.hidden = true; }
-  const nudgeTimer = soilUsedBefore ? null : setTimeout(() => {
+  const nudgeTimer = setTimeout(() => {
     if ($("soilToggle").getAttribute("aria-checked") === "true") return;
     nudge.hidden = false;
     placeNudge();
@@ -351,7 +350,6 @@
 
   $("soilToggle").addEventListener("click", () => {
     hideNudge();
-    try { localStorage.setItem(NUDGE_KEY, "1"); } catch (e) { /* storage unavailable: fine */ }
     const on = $("soilToggle").getAttribute("aria-checked") !== "true";
     $("soilToggle").setAttribute("aria-checked", String(on));
     $("soilPanel").hidden = !on;
