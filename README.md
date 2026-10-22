@@ -26,7 +26,6 @@ Any static host works too, for example GitHub Pages, Netlify or Cloudflare Pages
 | `index.html` | Page layout: top bar, map, and the data panel (inputs, readouts, chart, weather, vegetation, soil) |
 | `style.css` | Design tokens (colours, Archivo font, radius) and component styles, ported from the Claude Design file |
 | `app.js` | Map setup and look (`CONFIG`: imagery, terrain exaggeration, coffee belt), data fetching, rendering |
-| `assets/` | Terroir Map wordmark and Barista Hustle badge |
 | `climate.js` | Pure calculations: monthly aggregation, Köppen–Geiger class, altitude effects, coffee fit. Also works in Node (`require('./climate.js')`) |
 | `glossary.js` | Plain-language explanations for the hover tooltips (terms, abbreviations, soil groups, Köppen letters). Elements opt in with `data-tip="key"` |
 | `data/outlines/<CC>.json` | Region outlines, one file per country (ISO code), loaded only when a region in that country is selected |

@@ -42,7 +42,6 @@
   --shadow-md: 0 3px 10px color-mix(in srgb, #2d2b2b 16%, transparent);
 
   --panel-w: 440px;
-  --topbar-h: 54px;
   color-scheme: light;
 }
 
@@ -64,16 +63,11 @@ a:hover { color: var(--color-accent); }
 
 /* — shell — */
 .app { display: flex; flex-direction: column; min-height: 100dvh; }
-.topbar {
-  flex: none; height: var(--topbar-h); padding: 0 16px;
-  display: flex; align-items: center; justify-content: space-between; gap: 32px;
-  position: relative; z-index: 2; box-shadow: var(--shadow-md);
+/* Page heading for screen readers only (there is no visible title bar). */
+.visually-hidden {
+  position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden;
+  clip: rect(0 0 0 0); white-space: nowrap; border: 0;
 }
-.topbar h1 { display: flex; align-items: center; }
-.topbar h1 img { display: block; height: 30px; width: auto; }
-.brand-badge { display: block; flex: none; border-radius: 50%; }
-.brand-badge:hover { opacity: .8; }
-.brand-badge img { display: block; width: 48px; height: 48px; mix-blend-mode: multiply; }
 
 .layout { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 
