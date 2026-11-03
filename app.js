@@ -1,7 +1,7 @@
 /* Terroir Map — main app.
  * Map: MapLibre GL with Esri World Imagery + AWS Terrain Tiles (3D, tiltable).
  * Data per clicked point:
- *   - Elevation:  Open-Meteo Elevation API (Copernicus DEM 90 m)
+ *   - Elevation:  Open-Meteo Elevation API (Copernicus DEM 90 m); slope and aspect from a 3×3 grid of it
  *   - Weather:    Open-Meteo Historical Weather API (ERA5 / ERA5-Land daily)
  *   - Soil:       ISRIC SoilGrids v2.0 (WRB classification + topsoil properties)
  */
@@ -50,7 +50,7 @@
   const state = {
     regionId: DEFAULT_REGION.id, lat: DEFAULT_REGION.lat, lon: DEFAULT_REGION.lon,
     from: 0, to: 6, years: 5, metric: "rain",
-    alt: null, altLoading: true,
+    alt: null, altLoading: true, slope: null, aspect: null,
     groups: null, yearSpan: null, loadSpan: null, wLoading: true, wError: false,
     hover: null, showTable: false,
   };
@@ -612,22 +612,47 @@
   }
   const f4 = x => x.toFixed(4);
 
-  // ---------- Elevation ----------
+  // ---------- Elevation, slope and aspect ----------
+  // One request for a 3×3 grid of points 90 m apart (the elevation model's detail) centred on the chosen point.
+  // The centre gives the altitude; the grid gives slope and aspect with Horn's method (as used by GIS hillshading).
+  const GRID_M = 90;
+  function gridPoints(lat, lon) {
+    const dLat = GRID_M / 111320, dLon = GRID_M / (111320 * Math.cos(lat * Math.PI / 180));
+    const pts = [];
+    for (const r of [1, 0, -1]) for (const c of [-1, 0, 1]) pts.push([lat + r * dLat, lon + c * dLon]); // rows north → south
+    return pts;
+  }
+  function slopeAspect(z) {
+    if (z.length !== 9 || z.some(v => v == null || Number.isNaN(v))) return { slope: null, aspect: null };
+    const [a, b, c, d, , f, g, h, i] = z;
+    const dzdx = ((c + 2 * f + i) - (a + 2 * d + g)) / (8 * GRID_M); // rise towards the east
+    const dzdy = ((a + 2 * b + c) - (g + 2 * h + i)) / (8 * GRID_M); // rise towards the north
+    const slope = Math.atan(Math.hypot(dzdx, dzdy)) * 180 / Math.PI;
+    // Aspect: the compass direction the slope faces (downhill), clockwise from north.
+    const aspect = (Math.atan2(-dzdx, -dzdy) * 180 / Math.PI + 360) % 360;
+    return { slope, aspect };
+  }
   let elevToken = 0;
   async function loadElevation() {
     const token = ++elevToken;
     state.altLoading = true; renderReadouts(); setLoading("elevation", true);
-    let alt = null;
+    const pts = gridPoints(state.lat, state.lon);
+    let z = null;
     try {
-      const d = await getJSON(`https://api.open-meteo.com/v1/elevation?latitude=${f4(state.lat)}&longitude=${f4(state.lon)}`);
-      alt = d.elevation && d.elevation[0];
+      const d = await getJSON(`https://api.open-meteo.com/v1/elevation?latitude=${pts.map(p => f4(p[0])).join(",")}&longitude=${pts.map(p => f4(p[1])).join(",")}`);
+      z = d.elevation;
     } catch (err) {
-      const q = map.queryTerrainElevation && map.queryTerrainElevation([state.lon, state.lat]);
-      if (q != null) alt = q / (map.getTerrain()?.exaggeration || 1);
+      // Offline fallback: the map's own terrain tiles (coarser, and only while terrain is on).
+      if (map.queryTerrainElevation) {
+        const ex = map.getTerrain()?.exaggeration || 1;
+        z = pts.map(([la, lo]) => { const q = map.queryTerrainElevation([lo, la]); return q == null ? null : q / ex; });
+      }
     }
     if (token !== elevToken) return;
     setLoading("elevation", false);
+    const alt = z && z[4];
     state.alt = alt == null || Number.isNaN(alt) ? null : alt;
+    Object.assign(state, z ? slopeAspect(z) : { slope: null, aspect: null });
     state.altLoading = false;
     renderReadouts();
   }
@@ -661,6 +686,22 @@
   // ---------- Rendering ----------
   let irradiance = null; // W/m² over the selected months; set by renderWeather
 
+  const COMPASS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
+  const FLAT_DEG = 1; // below this the ground is essentially flat and has no meaningful facing
+  function slopeRow() {
+    const pending = state.altLoading ? "…" : state.slope == null ? "–" : null;
+    const deg = state.slope;
+    return { k: "Slope", tip: "slope",
+      v: pending || (deg < 10 ? deg.toFixed(1) : Math.round(deg)) + "°",
+      u: pending ? "steepness" : `${Math.round(Math.tan(deg * Math.PI / 180) * 100)}% gradient` };
+  }
+  function aspectRow() {
+    const pending = state.altLoading ? "…" : state.aspect == null ? "–" : null;
+    if (pending) return { k: "Aspect", v: pending, u: "direction faced", tip: "aspect" };
+    if (state.slope < FLAT_DEG) return { k: "Aspect", v: "Flat", u: "no clear facing", tip: "aspect" };
+    return { k: "Aspect", v: COMPASS[Math.round(state.aspect / 45) % 8], u: `faces ${Math.round(state.aspect)}°`, tip: "aspect" };
+  }
+
   function renderReadouts() {
     const a = state.altLoading ? "…" : state.alt == null ? "–" : null;
     const rows = [
@@ -668,6 +709,7 @@
       { k: "−ΔT", v: a || C.tempDrop(state.alt).toFixed(1), u: "°C vs sea level", tip: "deltaT" },
       { k: "UV-Rel", v: a || "×" + C.uvRelative(state.alt).toFixed(2), u: "vs sea level", tip: "uvRel" },
       { k: "Irrad.", v: irradiance == null ? "–" : String(Math.round(irradiance)), u: "W/m², period", tip: "irradiance" },
+      slopeRow(), aspectRow(),
     ];
     $("readouts").innerHTML = rows.map(r =>
       `<div class="readout" data-tip="${r.tip}"><span class="label term">${r.k}</span><span class="readout-v">${r.v}</span><span class="readout-u">${r.u}</span></div>`

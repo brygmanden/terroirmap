@@ -61,6 +61,17 @@ window.GLOSSARY = (function () {
       why: "Sunlight powers photosynthesis, but coffee evolved as a forest-understorey plant and its leaves are saturated by moderate light. High light plus heat causes stress and can exhaust the plant after a big crop; cloud, mist or shade softens this.",
     },
 
+    "slope": {
+      title: "Slope (steepness)",
+      what: "How steep the ground is at this point, in degrees and as a gradient (the rise per 100 m across). Worked out from the altitude of the surrounding 90 m grid, so it shows the general hillside, not single terraces or rows.",
+      why: "Slopes drain cold night air and rainwater away, which lowers frost and waterlogging risk, and many celebrated coffees grow on steep hillsides. Very steep ground (above roughly 30°, or 60%) erodes easily and has to be picked and worked by hand, often on terraces.",
+    },
+    "aspect": {
+      title: "Aspect (direction the slope faces)",
+      what: "The compass direction the hillside faces, downhill, shown as a point (N, NE, E…) and in degrees clockwise from north. On nearly flat ground (under 1°) there is no clear facing.",
+      why: "Aspect controls how much sun a slope gets and when. East-facing slopes catch the gentle morning sun and are shaded from the hot afternoon, which many growers prize. Away from the equator, slopes facing the equator (north-facing in the southern hemisphere, south-facing in the northern) are warmer and sunnier; close to the equator the difference is small.",
+    },
+
     // ---- Period controls ----
     "from": {
       title: "From",
