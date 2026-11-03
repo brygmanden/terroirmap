@@ -339,7 +339,7 @@
   let nudgeHideTimer = null;
   function hideNudge() { clearTimeout(nudgeTimer); clearTimeout(nudgeHideTimer); nudge.hidden = true; }
   const nudgeTimer = setTimeout(() => {
-    if (+$("soilSlider").value > 0 || !$("soilPanel").hidden) return;
+    if (soilTouched) return;
     nudge.hidden = false;
     placeNudge();
     nudgeHideTimer = setTimeout(hideNudge, 20000);
@@ -354,9 +354,12 @@
   });
 
   // Slider: 0 = overlay off (nothing is requested from ISRIC); above 0 fades the soil colours in.
+  let soilTouched = false; // the slider or the "Soil types" link has been used (no help bubble then)
   function setSoilStrength(v) {
     const on = v > 0;
     $("soilSlider").setAttribute("aria-valuetext", on ? `${v}%` : "Off");
+    // Accent fill up to just past the knob (11px knob inside 2px padding), full at 100; none when off.
+    $("soilSlider").style.setProperty("--fill", on ? `calc(15px + (100% - 15px) * ${v / 100})` : "0px");
     const apply = () => {
       const wasOn = map.getLayoutProperty("soil", "visibility") === "visible";
       if (on && !wasOn) { soilErrors = 0; $("soilLayerMsg").hidden = true; }
@@ -365,13 +368,15 @@
     };
     map.isStyleLoaded() ? apply() : map.once("load", apply);
   }
-  $("soilSlider").addEventListener("input", e => { hideNudge(); setSoilStrength(+e.target.value); });
+  $("soilSlider").addEventListener("input", e => { soilTouched = true; hideNudge(); setSoilStrength(+e.target.value); });
   // "Soil types" link: shows or hides the colour legend.
   function setSoilLegend(open) {
     $("soilPanel").hidden = !open;
     $("soilLegendLink").setAttribute("aria-expanded", String(open));
   }
-  $("soilLegendLink").addEventListener("click", () => { hideNudge(); setSoilLegend($("soilPanel").hidden); });
+  $("soilLegendLink").addEventListener("click", () => { soilTouched = true; hideNudge(); setSoilLegend($("soilPanel").hidden); });
+  // The legend starts open on desktop and closed on phones and tablets.
+  setSoilLegend(wide);
   $("soilLegendImg").addEventListener("error", () => { $("soilLegendImg").hidden = true; });
   // If ISRIC's server refuses the custom colours, fall back to its own colours and legend image.
   map.on("error", e => {
