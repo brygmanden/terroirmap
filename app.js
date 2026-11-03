@@ -215,8 +215,8 @@
     attributionControl: false, // added below, in the top-left stack
     style: {
       version: 8,
-      // Self-hosted map fonts (Noto Sans, SIL OFL) for the farm labels; Chinese characters use the system font.
-      glyphs: new URL("assets/fonts/", location.href).href + "{fontstack}/{range}.pbf",
+      // Map-label glyphs built from the NoBH fonts (assets/fonts/glyphs); Chinese characters use the system font.
+      glyphs: new URL("assets/fonts/glyphs/", location.href).href + "{fontstack}/{range}.pbf",
       sources: {
         sat: {
           type: "raster", tileSize: 256, maxzoom: 18,
@@ -259,9 +259,9 @@
         // (farms only) the varieties in a smaller line underneath, sitting just above the dot.
         { id: "farm-labels", type: "symbol", source: "farms", minzoom: 9, layout: {
           "text-field": ["case", ["has", "v"],
-            ["format", ["get", "n"], {}, "\n", {}, ["get", "v"], { "font-scale": 0.79, "text-font": ["literal", ["Noto Sans Regular"]], "text-color": "rgba(249,249,249,0.8)" }],
+            ["format", ["get", "n"], {}, "\n", {}, ["get", "v"], { "font-scale": 0.79, "text-font": ["literal", ["NoBH Regular"]], "text-color": "rgba(249,249,249,0.8)" }],
             ["get", "n"]],
-          "text-font": ["Noto Sans Medium"], "text-size": 14, "text-line-height": 1.15, "text-max-width": 14,
+          "text-font": ["NoBH Bold"], "text-size": 14, "text-line-height": 1.15, "text-max-width": 14,
           "text-anchor": "bottom", "text-offset": [0, -1.3], "text-justify": "center",
           "icon-image": "label-bg", "icon-text-fit": "both", "icon-text-fit-padding": [5, 10, 6, 10], "icon-anchor": "bottom",
           "text-padding": 4 },

@@ -30,7 +30,8 @@ Any static host works too, for example GitHub Pages, Netlify or Cloudflare Pages
 | `glossary.js` | Plain-language explanations for the hover tooltips (terms, abbreviations, soil groups, Köppen letters). Elements opt in with `data-tip="key"` |
 | `data/outlines/<CC>.json` | Region outlines, one file per country (ISO code), loaded only when a region in that country is selected |
 | `data/farms.geojson` | 3,959 coffee farms, mills and auctions with a location (from `global_coffee_farms_mills_auctions.csv`): type, name, up to three varieties (farms only) and how exact the position is. Contact details and owner names are left out |
-| `assets/fonts/` | Noto Sans (SIL Open Font License) map-label fonts, Latin, Thai and punctuation ranges only |
+| `assets/fonts/bh/` | Barista Hustle web fonts (Head, NoBH) used by the page |
+| `assets/fonts/glyphs/` | Map-label glyphs (SDF `.pbf`) built from NoBH Regular/Bold: Latin, Thai (system Thai font fallback) and punctuation ranges |
 | `soils.js` | The 32 WRB soil groups from Prof Steven Abbott: map colour, theme, descriptions, drainage/nutrients/acidity/depth, coffee suitability and a typical horizon profile. Drives the soil map colours, legend, tooltips and the soil details popup |
 | `regions.js` | 389 coffee regions in 60 countries, sorted by country then region: name, other names, main species, label point and the admin units behind each outline |
 | `docs/original-app.md` | Notes on the original app's interface |
