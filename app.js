@@ -372,8 +372,12 @@
 
   // Slider: 0 = overlay off (nothing is requested from ISRIC); above 0 fades the soil colours in.
   let soilTouched = false; // the slider or the "Soil types" link has been used (no help bubble then)
+  let soilOn = false;
   function setSoilStrength(v) {
     const on = v > 0;
+    // Desktop: the legend opens when the overlay is switched on and closes when it is switched off.
+    if (on !== soilOn && window.matchMedia("(min-width: 960px)").matches) setSoilLegend(on);
+    soilOn = on;
     $("soilSlider").setAttribute("aria-valuetext", on ? `${v}%` : "Off");
     // Accent pill from the left end to the knob's right edge (11px knob, 2px inset); none when off.
     $("soilSliderWrap").style.setProperty("--fill", on ? `calc(11px + (100% - 15px) * ${v / 100})` : "0px");
@@ -396,8 +400,8 @@
     $("soilLegendLink").setAttribute("aria-expanded", String(open));
   }
   $("soilLegendLink").addEventListener("click", () => { soilTouched = true; hideNudge(); setSoilLegend($("soilPanel").hidden); });
-  // The legend starts open on desktop and closed on phones and tablets.
-  setSoilLegend(wide);
+  // The legend starts hidden everywhere (on desktop it opens with the overlay; see setSoilStrength).
+  setSoilLegend(false);
   $("soilLegendImg").addEventListener("error", () => { $("soilLegendImg").hidden = true; });
   // If ISRIC's server refuses the custom colours, fall back to its own colours and legend image.
   map.on("error", e => {
