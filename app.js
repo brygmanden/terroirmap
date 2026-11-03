@@ -639,7 +639,7 @@
     const pts = gridPoints(state.lat, state.lon);
     let z = null;
     try {
-      const d = await getJSON(`https://api.open-meteo.com/v1/elevation?latitude=${pts.map(p => f4(p[0])).join(",")}&longitude=${pts.map(p => f4(p[1])).join(",")}`);
+      const d = await getJSON(`https://api.open-meteo.com/v1/elevation?latitude=${pts.map(p => p[0].toFixed(6)).join(",")}&longitude=${pts.map(p => p[1].toFixed(6)).join(",")}`);
       z = d.elevation;
     } catch (err) {
       // Offline fallback: the map's own terrain tiles (coarser, and only while terrain is on).
@@ -691,15 +691,37 @@
   function slopeRow() {
     const pending = state.altLoading ? "…" : state.slope == null ? "–" : null;
     const deg = state.slope;
-    return { k: "Slope", tip: "slope",
+    return { k: "Slope", tip: "slope", wide: true, g: slopeSvg(pending ? null : deg),
       v: pending || (deg < 10 ? deg.toFixed(1) : Math.round(deg)) + "°",
       u: pending ? "steepness" : `${Math.round(Math.tan(deg * Math.PI / 180) * 100)}% gradient` };
   }
   function aspectRow() {
     const pending = state.altLoading ? "…" : state.aspect == null ? "–" : null;
-    if (pending) return { k: "Aspect", v: pending, u: "direction faced", tip: "aspect" };
-    if (state.slope < FLAT_DEG) return { k: "Aspect", v: "Flat", u: "no clear facing", tip: "aspect" };
-    return { k: "Aspect", v: COMPASS[Math.round(state.aspect / 45) % 8], u: `faces ${Math.round(state.aspect)}°`, tip: "aspect" };
+    if (pending) return { k: "Aspect", v: pending, u: "direction faced", tip: "aspect", wide: true, g: compassSvg(null) };
+    if (state.slope < FLAT_DEG) return { k: "Aspect", v: "Flat", u: "no clear facing", tip: "aspect", wide: true, g: compassSvg("flat") };
+    return { k: "Aspect", v: COMPASS[Math.round(state.aspect / 45) % 8], u: `faces ${Math.round(state.aspect)}°`, tip: "aspect", wide: true, g: compassSvg(state.aspect) };
+  }
+  // Slope drawing: a hillside triangle at the true angle, with the angle marked where it meets the level ground.
+  function slopeSvg(deg) {
+    const B = 50, R = 92, maxW = 84, maxH = 44;
+    let shape = "";
+    if (deg != null) {
+      const a = deg * Math.PI / 180, t = Math.tan(a);
+      const w = t * maxW <= maxH ? maxW : maxH / t, h = w * t, x0 = R - w;
+      const r = Math.min(16, w * 0.6), ax = x0 + r * Math.cos(a), ay = B - r * Math.sin(a);
+      shape = `<path d="M${x0.toFixed(1)} ${B}L${R} ${B}L${R} ${(B - h).toFixed(1)}Z" class="g-fill"/>`
+        + (deg >= 1 ? `<path d="M${(x0 + r).toFixed(1)} ${B}A${r} ${r} 0 0 0 ${ax.toFixed(1)} ${ay.toFixed(1)}" class="g-line"/>` : "")
+        + `<path d="M${x0.toFixed(1)} ${B}L${R} ${(B - h).toFixed(1)}" class="g-accent"/>`;
+    }
+    return `<svg class="readout-g" width="96" height="56" viewBox="0 0 96 56" aria-hidden="true"><path d="M4 ${B}H${R}" class="g-base"/>${shape}</svg>`;
+  }
+  // Aspect drawing: a compass ring with N marked; the red needle points the way the slope faces (downhill).
+  function compassSvg(deg) {
+    const ticks = [0, 90, 180, 270].map(d => `<path d="M28 13v4" transform="rotate(${d} 28 33)" class="g-base"/>`).join("");
+    const needle = deg == null ? "" : deg === "flat" ? `<circle cx="28" cy="33" r="3" class="g-dot"/>`
+      : `<g transform="rotate(${Math.round(deg)} 28 33)"><path d="M28 16L33 33H23Z" class="g-needle"/><path d="M23 33H33L28 48Z" class="g-tail"/></g>`;
+    return `<svg class="readout-g" width="56" height="56" viewBox="0 0 56 56" aria-hidden="true">`
+      + `<circle cx="28" cy="33" r="20" class="g-ring"/>${ticks}<text x="28" y="9" class="g-n">N</text>${needle}</svg>`;
   }
 
   function renderReadouts() {
@@ -712,7 +734,7 @@
       slopeRow(), aspectRow(),
     ];
     $("readouts").innerHTML = rows.map(r =>
-      `<div class="readout" data-tip="${r.tip}"><span class="label term">${r.k}</span><span class="readout-v">${r.v}</span><span class="readout-u">${r.u}</span></div>`
+      `<div class="readout${r.wide ? " readout-wide" : ""}" data-tip="${r.tip}"><span class="label term">${r.k}</span><span class="readout-v">${r.v}</span><span class="readout-u">${r.u}</span>${r.g || ""}</div>`
     ).join("");
   }
 

@@ -304,6 +304,18 @@ select.control { padding-inline: 8px; }
 }
 .readout-u { font-size: 11px; color: var(--color-neutral-700); white-space: nowrap; }
 .readout .label { white-space: nowrap; }
+/* Slope and aspect: two columns wide, text on the left and a small drawing on the right. */
+.readout-wide { grid-column: span 2; grid-template-columns: minmax(0, 1fr) auto; column-gap: 12px; }
+.readout-wide > :not(.readout-g) { grid-column: 1; }
+.readout-g { grid-column: 2; grid-row: 1 / span 3; align-self: center; overflow: visible; }
+.readout-g .g-base, .readout-g .g-ring { fill: none; stroke: var(--color-neutral-300); stroke-width: 2; stroke-linecap: round; }
+.readout-g .g-fill { fill: color-mix(in srgb, var(--color-accent) 14%, transparent); }
+.readout-g .g-accent { fill: none; stroke: var(--color-accent); stroke-width: 2; stroke-linecap: round; }
+.readout-g .g-line { fill: none; stroke: var(--color-neutral-700); stroke-width: 1.5; }
+.readout-g .g-needle { fill: var(--color-accent); }
+.readout-g .g-tail { fill: var(--color-neutral-300); }
+.readout-g .g-dot { fill: var(--color-neutral-700); }
+.readout-g .g-n { font: 700 9px var(--font-body); fill: var(--color-neutral-700); text-anchor: middle; }
 
 /* weather variable picker */
 .metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; }
