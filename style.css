@@ -70,8 +70,8 @@ a:hover { color: var(--color-accent); }
 .map-pane { position: relative; flex: none; height: min(78.4vh, 708px); min-height: 380px; min-width: 0; background: var(--color-map-bg); } /* phones/tablets; desktop overrides below */
 .map { position: absolute; inset: 0; }
 
-/* Top-left stack: help box, then the loading indicator just below it. */
-/* Top-left stack (map controls, 10px apart): help (?), credits (i), loading indicator. */
+/* Top-left stack (map controls, 10px apart): messages such as "Loading regional data…" (hidden when
+   there are none), help (?), credits (i). */
 .map-topleft {
   max-width: min(360px, calc(100vw - 90px));
   display: flex; flex-direction: column; align-items: flex-start; gap: 10px;

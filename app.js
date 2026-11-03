@@ -307,11 +307,15 @@
     if (!document.fullscreenElement) placeFullscreen();
   });
   // Top left, stacked from the top with the same 10px spacing as the navigation buttons:
-  // help (?), credits (i), then the loading indicator.
+  // messages (e.g. "Loading regional data…"), help (?), credits (i). The message box is hidden when
+  // empty, so ? and i only move down while a message is showing.
   const asControl = el => ({ onAdd() { el.classList.add("maplibregl-ctrl"); return el; }, onRemove() {} });
+  const messages = document.querySelector(".map-topleft");
+  const updateMessages = () => { messages.hidden = ![...messages.children].some(c => !c.hidden); };
+  map.addControl(asControl(messages), "top-left");
   map.addControl(asControl($("hint")), "top-left");
   map.addControl(new maplibregl.AttributionControl({ compact: true }), "top-left");
-  map.addControl(asControl(document.querySelector(".map-topleft")), "top-left");
+  updateMessages();
   // Scale: bottom right on desktop, top right (left of the navigation buttons) on phones and tablets;
   // it moves if the window is resized across the 960px breakpoint.
   const scale = new maplibregl.ScaleControl({ unit: "metric" });
@@ -538,6 +542,7 @@
   function setLoading(kind, on) {
     on ? pending.add(kind) : pending.delete(kind);
     $("loading").hidden = pending.size === 0;
+    updateMessages();
   }
 
   function loadAll() {
