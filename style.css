@@ -1,16 +1,21 @@
 /* Terroir Map — design tokens and components, ported from the Claude Design file (Modernist system).
    Layout: top bar, then map (fills) | data panel (440px); stacks below 960px. Change the look via the tokens. */
+/* Barista Hustle fonts. Each loads from a copy in this repo (assets/fonts/bh/) when present; otherwise the
+   browser tries baristahustle.com, which only works if that server allows other sites to use its fonts (CORS). */
 @font-face {
   font-family: "Head"; font-weight: 700; font-style: normal; font-display: swap;
-  src: url("https://www.baristahustle.com/wp-content/themes/divi-child/assets/fonts/head/Head-Bold.woff2") format("woff2");
+  src: url("assets/fonts/bh/Head-Bold.woff2") format("woff2"),
+       url("https://www.baristahustle.com/wp-content/themes/divi-child/assets/fonts/head/Head-Bold.woff2") format("woff2");
 }
 @font-face {
   font-family: "NoBH"; font-weight: 400; font-style: normal; font-display: swap;
-  src: url("https://www.baristahustle.com/wp-content/themes/divi-child/assets/fonts/nobh/NoBH-Regular.woff2") format("woff2");
+  src: url("assets/fonts/bh/NoBH-Regular.woff2") format("woff2"),
+       url("https://www.baristahustle.com/wp-content/themes/divi-child/assets/fonts/nobh/NoBH-Regular.woff2") format("woff2");
 }
 @font-face {
   font-family: "NoBH"; font-weight: 700; font-style: normal; font-display: swap;
-  src: url("https://www.baristahustle.com/wp-content/themes/divi-child/assets/fonts/nobh/NoBH-Bold.woff2") format("woff2");
+  src: url("assets/fonts/bh/NoBH-Bold.woff2") format("woff2"),
+       url("https://www.baristahustle.com/wp-content/themes/divi-child/assets/fonts/nobh/NoBH-Bold.woff2") format("woff2");
 }
 
 :root {
