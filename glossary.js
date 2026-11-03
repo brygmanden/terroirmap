@@ -12,7 +12,7 @@ window.GLOSSARY = (function () {
 
     "soil-overlay": {
       title: "Soil types map",
-      what: "Colours the map by the most likely soil group at each spot, from ISRIC SoilGrids, a global soil map with about 250 m detail. It works on both the flat map and the 3D terrain; use the slider to see the satellite image through it.",
+      what: "Colours the map by the most likely soil group at each spot, from ISRIC SoilGrids, a global soil map with about 250 m detail. It works on both the flat map and the 3D terrain. Drag the slider to fade the soil colours in over the map, and click \"Soil types\" to show or hide the colour legend.",
       why: "Shows how soils change across a region, for example the red Nitisols of the East African highlands or the volcanic Andosols of Central America. It is a modelled estimate: tap a point for its soil details in the panel, and test real fields before planting.",
     },
 

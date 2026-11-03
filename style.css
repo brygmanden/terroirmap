@@ -159,20 +159,15 @@ a:hover { color: var(--color-accent); }
 @keyframes nudge-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 
 /* soil type overlay */
-.soil-toggle {
-  display: inline-flex; align-items: center; gap: 6px; padding: 2px 0; border: 0; background: none;
-  font: inherit; font-size: 12px; font-weight: 700; color: var(--color-text); cursor: pointer;
+/* "Soil types" link (shows/hides the legend) + slider that fades the overlay in */
+.soil-control { display: inline-flex; align-items: center; gap: 8px; }
+.soil-legend-link {
+  padding: 2px 0; border: 0; background: none; cursor: pointer;
+  font: inherit; font-size: 12px; font-weight: 700; color: var(--color-accent-700);
+  text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px;
 }
-.soil-switch {
-  position: relative; width: 26px; height: 15px; flex: none; border-radius: 99px;
-  background: var(--color-neutral-300); transition: background .15s;
-}
-.soil-switch::after {
-  content: ""; position: absolute; top: 2px; left: 2px; width: 11px; height: 11px; border-radius: 50%;
-  background: #fff; box-shadow: 0 1px 2px rgba(0, 0, 0, .3); transition: transform .15s;
-}
-.soil-toggle[aria-checked="true"] .soil-switch { background: var(--color-accent); }
-.soil-toggle[aria-checked="true"] .soil-switch::after { transform: translateX(11px); }
+.soil-legend-link:hover { color: var(--color-accent); }
+.soil-slider { width: 90px; margin: 0; accent-color: var(--color-accent); cursor: pointer; }
 
 .soil-panel {
   width: min(260px, 100%); display: grid; gap: 8px; padding: 10px 12px;
@@ -180,8 +175,6 @@ a:hover { color: var(--color-accent); }
 }
 .soil-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .soil-panel-title { font-weight: 700; font-size: 13px; }
-.soil-opacity { display: inline-flex; align-items: center; gap: 6px; color: var(--color-neutral-700); }
-.soil-opacity input { width: 90px; accent-color: var(--color-accent); }
 .soil-legend { max-height: min(260px, 32vh); overflow-y: auto; background: #fff; border-radius: 4px; }
 .soil-legend img { display: block; max-width: 100%; height: auto; }
 .soil-legend-list { display: grid; padding: 4px; }

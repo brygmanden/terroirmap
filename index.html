@@ -48,8 +48,7 @@
         </div>
         <div id="soilPanel" class="soil-panel" hidden>
           <div class="soil-panel-head">
-            <span class="soil-panel-title term" data-tip="soil-overlay">Soil types</span>
-            <label class="soil-opacity"><span>Opacity</span><input id="soilOpacity" type="range" min="10" max="100" step="5" value="65" aria-label="Soil layer opacity"></label>
+            <span class="soil-panel-title">Soil types legend</span>
           </div>
           <p id="soilLayerMsg" class="soil-layer-msg" hidden></p>
           <div class="soil-legend">
@@ -64,7 +63,10 @@
           <span class="legend-item" data-tip="farms"><span class="legend-pt farm"></span><span class="term">Farms</span></span>
           <span class="legend-item" data-tip="mills"><span class="legend-pt mill"></span><span class="term">Mills</span></span>
           <span class="legend-item" data-tip="auctions"><span class="legend-pt auction"></span><span class="term">Auctions</span></span>
-          <button id="soilToggle" class="soil-toggle" type="button" role="switch" aria-checked="false" data-tip="soil-overlay"><span class="soil-switch" aria-hidden="true"></span>Soil types</button>
+          <span id="soilControl" class="soil-control">
+            <button id="soilLegendLink" class="soil-legend-link" type="button" aria-expanded="false" aria-controls="soilPanel" data-tip="soil-overlay">Soil types</button>
+            <input id="soilSlider" class="soil-slider" type="range" min="0" max="100" step="5" value="0" aria-label="Soil types overlay strength" aria-valuetext="Off">
+          </span>
         </div>
       </div>
     </section>

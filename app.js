@@ -16,7 +16,7 @@
     imagery: "color",     // "color" | "grayscale"
     exaggeration: 3,      // terrain exaggeration, 1–3
     showBelt: true,       // coffee belt shading + tropic lines
-    soilOpacity: 0.65,    // soil type overlay opacity when switched on
+    soilOpacity: 0.65,    // soil overlay strength set when the "Try the Soil Types Overlay" bubble is clicked
   };
   // Soil type overlay: most probable WRB soil group from ISRIC SoilGrids, served as a WMS
   // (map images drawn on request), so it drapes over both the flat map and the 3D terrain.
@@ -321,45 +321,57 @@
   })();
   let soilErrors = 0, soilFallback = false;
   // ---------- "Try the Soil Types Overlay" nudge ----------
-  // Shown on every visit, 30 s after load, if the soil switch hasn't been clicked yet.
-  // It closes by itself after 20 s, or when the switch, the bubble or its x is clicked.
+  // Shown on every visit, 30 s after load, if the soil slider and link haven't been used yet.
+  // It closes by itself after 20 s, or when the slider, the link, the bubble or its x is used.
   try { localStorage.removeItem("terroirmap.soilOverlayUsed"); } catch (e) { /* old "don't show again" flag; no longer used */ }
   const nudge = $("soilNudge");
   function placeNudge() {
     if (nudge.hidden) return;
-    const pane = nudge.parentElement.getBoundingClientRect(), b = $("soilToggle").getBoundingClientRect();
+    const pane = nudge.parentElement.getBoundingClientRect(), b = $("soilControl").getBoundingClientRect();
     const w = nudge.offsetWidth, cx = b.left + b.width / 2 - pane.left;
     const left = Math.max(8, Math.min(cx - w / 2, pane.width - w - 8));
     nudge.style.left = left + "px";
-    // Sit above the whole legend (it wraps onto two lines on phones), pointing at the switch.
-    const legendTop = $("soilToggle").closest(".legend").getBoundingClientRect().top;
+    // Sit above the whole legend (it wraps onto two lines on phones), pointing at the soil control.
+    const legendTop = $("soilControl").closest(".legend").getBoundingClientRect().top;
     nudge.style.bottom = (pane.bottom - legendTop + 10) + "px";
     $("soilNudgeArrow").style.left = (cx - left) + "px";
   }
   let nudgeHideTimer = null;
   function hideNudge() { clearTimeout(nudgeTimer); clearTimeout(nudgeHideTimer); nudge.hidden = true; }
   const nudgeTimer = setTimeout(() => {
-    if ($("soilToggle").getAttribute("aria-checked") === "true") return;
+    if (+$("soilSlider").value > 0 || !$("soilPanel").hidden) return;
     nudge.hidden = false;
     placeNudge();
     nudgeHideTimer = setTimeout(hideNudge, 20000);
   }, 30000);
   window.addEventListener("resize", placeNudge);
   $("soilNudgeClose").addEventListener("click", hideNudge);
-  $("soilNudgeBody").addEventListener("click", () => { hideNudge(); $("soilToggle").click(); });
-
-  $("soilToggle").addEventListener("click", () => {
+  $("soilNudgeBody").addEventListener("click", () => {
     hideNudge();
-    const on = $("soilToggle").getAttribute("aria-checked") !== "true";
-    $("soilToggle").setAttribute("aria-checked", String(on));
-    $("soilPanel").hidden = !on;
-    soilErrors = 0; $("soilLayerMsg").hidden = true;
-    const apply = () => map.setLayoutProperty("soil", "visibility", on ? "visible" : "none");
+    $("soilSlider").value = Math.round(CONFIG.soilOpacity * 100);
+    setSoilStrength(+$("soilSlider").value);
+    setSoilLegend(true);
+  });
+
+  // Slider: 0 = overlay off (nothing is requested from ISRIC); above 0 fades the soil colours in.
+  function setSoilStrength(v) {
+    const on = v > 0;
+    $("soilSlider").setAttribute("aria-valuetext", on ? `${v}%` : "Off");
+    const apply = () => {
+      const wasOn = map.getLayoutProperty("soil", "visibility") === "visible";
+      if (on && !wasOn) { soilErrors = 0; $("soilLayerMsg").hidden = true; }
+      map.setLayoutProperty("soil", "visibility", on ? "visible" : "none");
+      map.setPaintProperty("soil", "raster-opacity", v / 100);
+    };
     map.isStyleLoaded() ? apply() : map.once("load", apply);
-  });
-  $("soilOpacity").addEventListener("input", e => {
-    if (map.getLayer("soil")) map.setPaintProperty("soil", "raster-opacity", +e.target.value / 100);
-  });
+  }
+  $("soilSlider").addEventListener("input", e => { hideNudge(); setSoilStrength(+e.target.value); });
+  // "Soil types" link: shows or hides the colour legend.
+  function setSoilLegend(open) {
+    $("soilPanel").hidden = !open;
+    $("soilLegendLink").setAttribute("aria-expanded", String(open));
+  }
+  $("soilLegendLink").addEventListener("click", () => { hideNudge(); setSoilLegend($("soilPanel").hidden); });
   $("soilLegendImg").addEventListener("error", () => { $("soilLegendImg").hidden = true; });
   // If ISRIC's server refuses the custom colours, fall back to its own colours and legend image.
   map.on("error", e => {

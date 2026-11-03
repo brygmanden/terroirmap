@@ -48,7 +48,7 @@ Any static host works too, for example GitHub Pages, Netlify or Cloudflare Pages
 | Vegetation | Köppen–Geiger class (Peel et al. 2007 thresholds) worked out from the 12-month climatology, with a typical vegetation description |
 | Soil Info | ISRIC SoilGrids v2.0 properties, depth-weighted over 0–30 cm: pH, organic carbon, clay, sand, silt, nitrogen, CEC |
 | Soil Type | SoilGrids WRB reference soil group probabilities (top 5) |
-| Soil types map | Map overlay (switch in the map legend): most probable WRB soil group from the ISRIC SoilGrids WMS (`maps.isric.org`, layer `MostProbable`), with ISRIC's own colour legend. Works on the flat map and the 3D terrain |
+| Soil types map | Map overlay (slider in the map legend fades it in; the "Soil types" link shows the legend): most probable WRB soil group from the ISRIC SoilGrids WMS (`maps.isric.org`, layer `MostProbable`), with ISRIC's own colour legend. Works on the flat map and the 3D terrain |
 
 All the APIs are free, need no key and allow cross-origin requests. Open-Meteo is free for non-commercial use; commercial use needs their paid plan. SoilGrids is a beta service and is sometimes slow, so the app shows a message and carries on without it.
 
