@@ -358,8 +358,8 @@
   function setSoilStrength(v) {
     const on = v > 0;
     $("soilSlider").setAttribute("aria-valuetext", on ? `${v}%` : "Off");
-    // Accent fill up to just past the knob (11px knob inside 2px padding), full at 100; none when off.
-    $("soilSlider").style.setProperty("--fill", on ? `calc(15px + (100% - 15px) * ${v / 100})` : "0px");
+    // Accent pill from the left end to the knob's right edge (11px knob, 2px inset); none when off.
+    $("soilSliderWrap").style.setProperty("--fill", on ? `calc(11px + (100% - 15px) * ${v / 100})` : "0px");
     const apply = () => {
       const wasOn = map.getLayoutProperty("soil", "visibility") === "visible";
       if (on && !wasOn) { soilErrors = 0; $("soilLayerMsg").hidden = true; }
