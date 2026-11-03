@@ -143,8 +143,10 @@
     if (rb) {
       const r = byId.get(rb.dataset.region);
       setPicker(false);
-      $("regionBtn").focus();
+      $("regionBtn").focus({ preventScroll: true });
       selectPoint(r.lat, r.lon, { fly: true, region: r.id });
+      // Phones: the map sits above the panel, so scroll back up to show the whole map flying to the region.
+      if (!window.matchMedia("(min-width: 960px)").matches) window.scrollTo({ top: 0, behavior: "smooth" });
     }
   });
   document.addEventListener("pointerdown", e => {
