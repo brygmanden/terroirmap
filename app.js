@@ -170,17 +170,24 @@
     $("hint").classList.toggle("open", open);
     $("hintBtn").setAttribute("aria-expanded", String(open));
     $("hintBtn").setAttribute("aria-label", open ? "Hide help" : "Show help");
+    scheduleFitTopLeft();
   }
   $("hintBtn").addEventListener("click", () => setHint(!$("hint").classList.contains("open")));
   // Minimise the help box on the first click anywhere (except its own ? button) or after 15 s.
+  // Presses on the other top-left controls (such as the i below it) wait for the click to finish: collapsing
+  // on press would move them up under the pointer and the click would miss.
   const autoHideHint = () => {
     clearTimeout(hintTimer);
     document.removeEventListener("pointerdown", onFirstPointer, true);
+    document.removeEventListener("click", onFirstClick, true);
     setHint(false);
   };
-  const onFirstPointer = e => { if (!e.target.closest("#hintBtn")) autoHideHint(); };
+  const inTopLeft = t => t.closest(".maplibregl-ctrl-top-left");
+  const onFirstPointer = e => { if (!e.target.closest("#hintBtn") && !inTopLeft(e.target)) autoHideHint(); };
+  const onFirstClick = e => { if (!e.target.closest("#hintBtn") && inTopLeft(e.target)) setTimeout(autoHideHint, 0); };
   const hintTimer = setTimeout(autoHideHint, 15000);
   document.addEventListener("pointerdown", onFirstPointer, true);
+  document.addEventListener("click", onFirstClick, true);
 
   $("tableBtn").addEventListener("click", () => {
     state.showTable = !state.showTable;
@@ -311,7 +318,7 @@
   // empty, so ? and i only move down while a message is showing.
   const asControl = el => ({ onAdd() { el.classList.add("maplibregl-ctrl"); return el; }, onRemove() {} });
   const messages = document.querySelector(".map-topleft");
-  const updateMessages = () => { messages.hidden = ![...messages.children].some(c => !c.hidden); };
+  const updateMessages = () => { messages.hidden = ![...messages.children].some(c => !c.hidden); scheduleFitTopLeft(); };
   map.addControl(asControl(messages), "top-left");
   map.addControl(asControl($("hint")), "top-left");
   map.addControl(new maplibregl.AttributionControl({ compact: true }), "top-left");
@@ -324,7 +331,7 @@
     map.addControl(scale, wideMq.matches ? "bottom-right" : "top-right");
   };
   placeScale();
-  wideMq.addEventListener("change", placeScale);
+  wideMq.addEventListener("change", () => { placeScale(); scheduleFitTopLeft(); });
   // Keep the compact attribution collapsed to its (i) button until the viewer opens it.
   // MapLibre re-expands it whenever the credits change, so undo that until the viewer opens it themselves.
   const attrib = document.querySelector("#map .maplibregl-ctrl-attrib");
@@ -338,9 +345,47 @@
         attrib.removeAttribute("open");
       }
     };
-    new MutationObserver(collapse).observe(attrib, { attributes: true, attributeFilter: ["class"] });
+    new MutationObserver(() => { collapse(); scheduleFitTopLeft(); }).observe(attrib, { attributes: true, attributeFilter: ["class"] });
     collapse();
   }
+
+  // Keep the top-left boxes (messages, help, credits) clear of the top-right controls (navigation buttons, and
+  // the scale bar on phones), with the same 10px gap: any top-left box at the same height as a top-right control
+  // is narrowed to end 10px before it. The scale bar's width changes with zoom, so this re-runs on zoom,
+  // resize, and whenever a top-left box opens, closes or changes.
+  function fitTopLeft() {
+    const gap = 10;
+    const boxes = [document.querySelector(".map-topleft"), $("hint"), document.querySelector("#map .maplibregl-ctrl-attrib")]
+      .filter(e => e && e.offsetParent !== null);
+    const right = [...document.querySelectorAll(".maplibregl-ctrl-top-right > .maplibregl-ctrl")].filter(e => e.offsetParent !== null);
+    boxes.forEach(e => { e.style.maxWidth = ""; });
+    for (let pass = 0; pass < 2; pass++) { // a narrowed box gets taller, so check its new height once more
+      for (const e of boxes) {
+        const r = e.getBoundingClientRect();
+        let limit = Infinity;
+        for (const c of right) {
+          const q = c.getBoundingClientRect();
+          if (q.bottom > r.top && q.top < r.bottom) limit = Math.min(limit, q.left - gap);
+        }
+        if (r.right > limit) {
+          // max-width excludes padding and border for content-box elements (MapLibre's credits box is one)
+          const cs = getComputedStyle(e);
+          const extra = cs.boxSizing === "content-box"
+            ? ["paddingLeft", "paddingRight", "borderLeftWidth", "borderRightWidth"].reduce((t, k) => t + parseFloat(cs[k]), 0) : 0;
+          e.style.maxWidth = Math.max(60, Math.floor(limit - r.left - extra)) + "px";
+        }
+      }
+    }
+  }
+  // (The "queued" flag lives on the function, so it can be called before this point in the file runs.)
+  function scheduleFitTopLeft() {
+    if (scheduleFitTopLeft.queued) return;
+    scheduleFitTopLeft.queued = true;
+    requestAnimationFrame(() => { scheduleFitTopLeft.queued = false; fitTopLeft(); });
+  }
+  map.on("zoom", scheduleFitTopLeft);
+  map.on("resize", scheduleFitTopLeft);
+  scheduleFitTopLeft();
   map.on("load", () => map.setTerrain({ source: "dem", exaggeration: CONFIG.exaggeration }));
   new ResizeObserver(() => map.resize()).observe($("map"));
 
