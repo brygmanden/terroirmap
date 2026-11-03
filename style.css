@@ -67,7 +67,7 @@ a:hover { color: var(--color-accent); }
 .layout { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 
 /* — map — */
-.map-pane { position: relative; flex: none; height: min(71.3vh, 644px); min-height: 345px; min-width: 0; background: var(--color-map-bg); } /* phones: 15% taller than before */
+.map-pane { position: relative; flex: none; height: min(78.4vh, 708px); min-height: 380px; min-width: 0; background: var(--color-map-bg); } /* phones/tablets; desktop overrides below */
 .map { position: absolute; inset: 0; }
 
 /* Top-left stack: help box, then the loading indicator just below it. */
