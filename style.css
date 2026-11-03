@@ -431,6 +431,9 @@ select.control { padding-inline: 8px; }
 /* Four readouts don't fit on a phone without truncating (e.g. "1,8…"), so use two rows there. */
 @media (max-width: 480px) {
   .readouts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  /* Phones: slope and aspect sit side by side like the other boxes, with a smaller drawing. */
+  .readout-wide { grid-column: span 1; column-gap: 6px; }
+  .readout-g { width: 46px; height: auto; }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
 
