@@ -205,7 +205,7 @@
   const map = new maplibregl.Map({
     container: "map",
     center: [state.lon, state.lat], zoom: wide ? 5.5 : 4.6, pitch: 45, bearing: -10, maxPitch: 80,
-    attributionControl: { compact: true },
+    attributionControl: false, // added below, in the top-left stack
     style: {
       version: 8,
       // Self-hosted map fonts (Noto Sans, SIL OFL) for the farm labels; Chinese characters use the system font.
@@ -282,10 +282,18 @@
       pixelRatio: 2, stretchX: [[r, size - r]], stretchY: [[r, size - r]],
     });
   });
+  // Top right: zoom/compass, terrain on/off, fullscreen (of the whole map area, so the legend and overlays stay).
   map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "top-right");
   map.addControl(new maplibregl.TerrainControl({ source: "dem", exaggeration: CONFIG.exaggeration }), "top-right");
-  map.addControl(new maplibregl.ScaleControl({ unit: "metric" }), "bottom-right");
-  // Keep the compact attribution collapsed to its (i) button so it doesn't cover the legend.
+  map.addControl(new maplibregl.FullscreenControl({ container: document.querySelector(".map-pane") }), "top-right");
+  // Top left, stacked from the top: scale, credits (i), then the help box and loading indicator.
+  map.addControl(new maplibregl.ScaleControl({ unit: "metric" }), "top-left");
+  map.addControl(new maplibregl.AttributionControl({ compact: true }), "top-left");
+  map.addControl({
+    onAdd() { const el = document.querySelector(".map-topleft"); el.classList.add("maplibregl-ctrl"); return el; },
+    onRemove() {},
+  }, "top-left");
+  // Keep the compact attribution collapsed to its (i) button until the viewer opens it.
   // MapLibre re-expands it whenever the credits change, so undo that until the viewer opens it themselves.
   const attrib = document.querySelector("#map .maplibregl-ctrl-attrib");
   if (attrib) {
