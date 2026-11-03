@@ -74,11 +74,14 @@ a:hover { color: var(--color-accent); }
 /* Top-left stack (map controls, 10px apart): help (?), credits (i), loading indicator. */
 .map-topleft {
   max-width: min(360px, calc(100vw - 90px));
-  display: flex; flex-direction: column; align-items: flex-start; gap: 8px;
+  display: flex; flex-direction: column; align-items: flex-start; gap: 10px;
   font-family: var(--font-body); /* the map sets its own font on its controls */
 }
 /* Scale: no outline, rounded like the other map boxes. Desktop: bottom right, 12px from the edges like the
    legend. Phones/tablets: top right, 10px left of the navigation buttons (29px wide, 10px from the edge). */
+/* MapLibre gives the collapsed (i) a 10px margin on every side, which doubled the gap below it;
+   use the same top/left-only margin as the other controls so every gap in the stack is 10px. */
+.maplibregl-ctrl-top-left .maplibregl-ctrl-attrib.maplibregl-compact { margin: 10px 0 0 10px; }
 .maplibregl-ctrl-scale {
   border: 0; border-radius: 6px; padding: 2px 8px; background: rgba(243, 242, 242, .9);
   color: var(--color-text); font: 600 11px/16px var(--font-body); box-sizing: content-box;
