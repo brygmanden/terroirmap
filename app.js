@@ -286,13 +286,22 @@
   map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "top-right");
   map.addControl(new maplibregl.TerrainControl({ source: "dem", exaggeration: CONFIG.exaggeration }), "top-right");
   map.addControl(new maplibregl.FullscreenControl({ container: document.querySelector(".map-pane") }), "top-right");
-  // Top left, stacked from the top: scale, credits (i), then the help box and loading indicator.
-  map.addControl(new maplibregl.ScaleControl({ unit: "metric" }), "top-left");
+  // Top left, stacked from the top with the same 10px spacing as the navigation buttons:
+  // help (?), credits (i), then the loading indicator.
+  const asControl = el => ({ onAdd() { el.classList.add("maplibregl-ctrl"); return el; }, onRemove() {} });
+  map.addControl(asControl($("hint")), "top-left");
   map.addControl(new maplibregl.AttributionControl({ compact: true }), "top-left");
-  map.addControl({
-    onAdd() { const el = document.querySelector(".map-topleft"); el.classList.add("maplibregl-ctrl"); return el; },
-    onRemove() {},
-  }, "top-left");
+  map.addControl(asControl(document.querySelector(".map-topleft")), "top-left");
+  // Scale: bottom right on desktop, top right (left of the navigation buttons) on phones and tablets;
+  // it moves if the window is resized across the 960px breakpoint.
+  const scale = new maplibregl.ScaleControl({ unit: "metric" });
+  const wideMq = window.matchMedia("(min-width: 960px)");
+  const placeScale = () => {
+    if (scale._map) map.removeControl(scale);
+    map.addControl(scale, wideMq.matches ? "bottom-right" : "top-right");
+  };
+  placeScale();
+  wideMq.addEventListener("change", placeScale);
   // Keep the compact attribution collapsed to its (i) button until the viewer opens it.
   // MapLibre re-expands it whenever the credits change, so undo that until the viewer opens it themselves.
   const attrib = document.querySelector("#map .maplibregl-ctrl-attrib");
