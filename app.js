@@ -366,9 +366,13 @@
       map.setLayoutProperty("soil", "visibility", on ? "visible" : "none");
       map.setPaintProperty("soil", "raster-opacity", v / 100);
     };
-    map.isStyleLoaded() ? apply() : map.once("load", apply);
+    // Apply as soon as the soil layer exists. (Not map.isStyleLoaded(): that is false while soil images are
+    // still downloading, i.e. during a drag, and waiting for "load" then never happens, so the change was lost.)
+    map.getLayer("soil") ? apply() : map.once("load", apply);
   }
   $("soilSlider").addEventListener("input", e => { soilTouched = true; hideNudge(); setSoilStrength(+e.target.value); });
+  // Also apply the final position when the knob is released (or set with the keyboard).
+  $("soilSlider").addEventListener("change", e => setSoilStrength(+e.target.value));
   // "Soil types" link: shows or hides the colour legend.
   function setSoilLegend(open) {
     $("soilPanel").hidden = !open;
