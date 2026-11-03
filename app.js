@@ -282,10 +282,30 @@
       pixelRatio: 2, stretchX: [[r, size - r]], stretchY: [[r, size - r]],
     });
   });
-  // Top right: zoom/compass, terrain on/off, fullscreen (of the whole map area, so the legend and overlays stay).
+  // Top right: zoom/compass, terrain on/off, fullscreen.
+  const wideMq = window.matchMedia("(min-width: 960px)");
   map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "top-right");
   map.addControl(new maplibregl.TerrainControl({ source: "dem", exaggeration: CONFIG.exaggeration }), "top-right");
-  map.addControl(new maplibregl.FullscreenControl({ container: document.querySelector(".map-pane") }), "top-right");
+  // Fullscreen takes the whole app on desktop (map + side panel) and only the map area on phones/tablets.
+  // MapLibre fixes the fullscreen element when the button is created, so it is recreated (outside
+  // fullscreen) when the window is resized across the 960px breakpoint.
+  let fullscreen = null;
+  const placeFullscreen = () => {
+    if (document.fullscreenElement) return; // finish this fullscreen first; re-checked on exit below
+    const container = document.querySelector(wideMq.matches ? ".app" : ".map-pane");
+    if (fullscreen && fullscreen._container === container) return;
+    if (fullscreen) map.removeControl(fullscreen);
+    fullscreen = new maplibregl.FullscreenControl({ container });
+    map.addControl(fullscreen, "top-right");
+  };
+  placeFullscreen();
+  wideMq.addEventListener("change", placeFullscreen);
+  document.addEventListener("fullscreenchange", () => {
+    // Tooltips are drawn at page level; move them into the fullscreen element so they still show.
+    document.getElementById("tip").hidden = true;
+    (document.fullscreenElement || document.body).appendChild(document.getElementById("tip"));
+    if (!document.fullscreenElement) placeFullscreen();
+  });
   // Top left, stacked from the top with the same 10px spacing as the navigation buttons:
   // help (?), credits (i), then the loading indicator.
   const asControl = el => ({ onAdd() { el.classList.add("maplibregl-ctrl"); return el; }, onRemove() {} });
@@ -295,7 +315,6 @@
   // Scale: bottom right on desktop, top right (left of the navigation buttons) on phones and tablets;
   // it moves if the window is resized across the 960px breakpoint.
   const scale = new maplibregl.ScaleControl({ unit: "metric" });
-  const wideMq = window.matchMedia("(min-width: 960px)");
   const placeScale = () => {
     if (scale._map) map.removeControl(scale);
     map.addControl(scale, wideMq.matches ? "bottom-right" : "top-right");

@@ -99,6 +99,8 @@ a:hover { color: var(--color-accent); }
 }
 /* Fullscreen: the whole map area (map, legend, overlays) fills the screen. */
 .map-pane:fullscreen { width: 100%; height: 100%; }
+/* Desktop fullscreen: the whole app (map + side panel, which keeps scrolling) fills the screen. */
+.app:fullscreen { width: 100%; height: 100%; background: var(--color-bg); }
 .hint {
   display: flex; align-items: flex-start; gap: 8px; max-width: min(360px, calc(100vw - 90px));
   border-radius: 14px; font-family: var(--font-body); /* the map sets its own font on its controls */
