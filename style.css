@@ -90,6 +90,8 @@ a:hover { color: var(--color-accent); }
 .maplibregl-ctrl-scale {
   border: 0; border-radius: 6px; padding: 2px 8px; background: rgba(243, 242, 242, .9);
   color: var(--color-text); font: 600 11px/16px var(--font-body); box-sizing: content-box;
+  /* MapLibre sets the width to the measured distance's length on screen; fit the box to its text instead. */
+  width: auto !important; white-space: nowrap;
 }
 .maplibregl-ctrl-bottom-right .maplibregl-ctrl-scale { margin: 0 12px 12px 0; }
 .maplibregl-ctrl-top-right .maplibregl-ctrl-scale { position: absolute; top: 10px; right: 49px; margin: 0; }
