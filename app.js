@@ -273,6 +273,12 @@
           tiles: ["https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png"],
           attribution: "Terrain © Mapzen, AWS Terrain Tiles",
         },
+        // Same tiles as "dem", as a separate source for the hillshade: MapLibre renders better when 3D terrain and
+        // hillshading don't share a source (the browser cache mostly avoids downloading the tiles twice).
+        "dem-hillshade": {
+          type: "raster-dem", encoding: "terrarium", tileSize: 256, maxzoom: 15,
+          tiles: ["https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png"],
+        },
         soil: {
           type: "raster", tiles: [SOIL_TILES], tileSize: 256, minzoom: 0, maxzoom: 13,
           attribution: "Soil types © ISRIC SoilGrids (CC BY 4.0)",
@@ -288,7 +294,7 @@
       },
       layers: [
         { id: "sat", type: "raster", source: "sat", paint: { "raster-saturation": CONFIG.imagery === "grayscale" ? -1 : 0, "raster-contrast": 0.08 } },
-        { id: "hillshade", type: "hillshade", source: "dem", paint: { "hillshade-exaggeration": 0.25, "hillshade-shadow-color": INK } },
+        { id: "hillshade", type: "hillshade", source: "dem-hillshade", paint: { "hillshade-exaggeration": 0.25, "hillshade-shadow-color": INK } },
         { id: "soil", type: "raster", source: "soil", layout: { visibility: "none" }, paint: { "raster-opacity": CONFIG.soilOpacity, "raster-fade-duration": 150 } },
         { id: "belt", type: "fill", source: "belt", layout: { visibility: beltVis }, paint: { "fill-color": "rgba(196,39,77,0.07)" } },
         { id: "tropics", type: "line", source: "tropics", layout: { visibility: beltVis }, paint: { "line-color": ACCENT, "line-width": 2, "line-dasharray": [3, 2] } },
@@ -1126,7 +1132,7 @@
   // coordinate, id or colour.
   const firstNumber = props => {
     if (!props) return NaN;
-    for (const k of ["value_0", "value_list", "value", "pixel", "GRAY_INDEX", "band_1", "Band1"]) if (props[k] != null && props[k] !== "") return parseFloat(props[k]);
+    for (const k of ["pixel_value", "value_0", "value_list", "value", "pixel", "GRAY_INDEX", "band_1", "Band1"]) if (props[k] != null && props[k] !== "") return parseFloat(props[k]);
     const v = Object.entries(props).find(([k, x]) => !/^(x|y|class|red|green|blue|fid|gml_id|id|name)$/i.test(k) && x !== "" && Number.isFinite(parseFloat(x)));
     return v == null ? NaN : parseFloat(v[1]);
   };
@@ -1201,10 +1207,50 @@
     const R = 6378137, x = R * lon * Math.PI / 180, y = R * Math.log(Math.tan(Math.PI / 4 + lat * Math.PI / 360)), d = 60;
     return `CRS=EPSG:3857&BBOX=${(x - d).toFixed(1)},${(y - d).toFixed(1)},${(x + d).toFixed(1)},${(y + d).toFixed(1)}&WIDTH=3&HEIGHT=3`;
   }
-  async function gfiValues(name, layers, fmt, lat, lon) {
-    const ask = list => soilFetch(mapUrl(name, `REQUEST=GetFeatureInfo&LAYERS=${list}&QUERY_LAYERS=${list}&STYLES=&${pointBox(lat, lon)}`
-      + `&I=1&J=1&FEATURE_COUNT=1&INFO_FORMAT=${encodeURIComponent(fmt.fmt)}`)).then(t => parseGfi(t, fmt.kind, list.split(",")));
+  const gfiUrl = (name, list, fmt, lat, lon) => mapUrl(name, `REQUEST=GetFeatureInfo&LAYERS=${list}&QUERY_LAYERS=${list}&STYLES=&${pointBox(lat, lon)}`
+    + `&I=1&J=1&FEATURE_COUNT=1&INFO_FORMAT=${encodeURIComponent(fmt)}`);
+  // GeoJSON features don't say which layer they come from, but the server lists layers in a fixed order (its map
+  // file's), which its plain-text replies show by name. That order is learned once per map from one plain-text reply
+  // (and remembered in this browser); then a single GeoJSON request answers for all of a map's layers.
+  const SOIL_ORDER_KEY = "terroirmap.soilLayerOrder";
+  let soilOrders = {};
+  try { soilOrders = JSON.parse(localStorage.getItem(SOIL_ORDER_KEY) || "{}") || {}; } catch (err) { soilOrders = {}; }
+  async function layerOrder(name, layers, plan, lat, lon) {
+    const key = `${name}:${[...layers].sort().join(",")}`;
+    if (Array.isArray(soilOrders[key])) return soilOrders[key];
+    const text = plan.fmts.find(f => f.kind === "text");
+    if (!text) return null;
+    try {
+      const reply = await soilFetch(gfiUrl(name, layers.join(","), text.fmt, lat, lon));
+      const order = [...reply.matchAll(/^\s*Layer '([^']+)'/gm)].map(m => m[1]);
+      // Usable only if it names exactly the layers asked for, each once.
+      if (order.length !== layers.length || new Set(order).size !== order.length || !order.every(l => layers.includes(l))) return null;
+      soilOrders[key] = order;
+      try { localStorage.setItem(SOIL_ORDER_KEY, JSON.stringify(soilOrders)); } catch (err) { /* only kept for this visit */ }
+      return order;
+    } catch (err) { return null; }
+  }
+  async function gfiValues(name, layers, fmt, lat, lon, plan) {
+    const ask = list => soilFetch(gfiUrl(name, list, fmt.fmt, lat, lon)).then(t => parseGfi(t, fmt.kind, list.split(",")));
     if (fmt.kind !== "json") return ask(layers.join(","));
+    if (layers.length > 1) {
+      const order = await layerOrder(name, layers, plan, lat, lon);
+      if (order) {
+        const text = await soilFetch(gfiUrl(name, order.join(","), fmt.fmt, lat, lon));
+        if (/ServiceException/i.test(text)) throw replied(`server error: ${snippet(text)}`);
+        let feats = null;
+        try { feats = JSON.parse(text).features; } catch (err) { feats = null; }
+        // One feature per layer: match them up in the server's order. Any other count (e.g. a layer with no data
+        // here) can't be matched safely, so fall through to one request per layer.
+        if (Array.isArray(feats) && feats.length === order.length) {
+          const out = {};
+          order.forEach((l, i) => { out[l] = firstNumber(feats[i].properties); });
+          return withSample(out, JSON.stringify(feats[0].properties));
+        }
+        if (Array.isArray(feats) && feats.length === 0) return withSample({}, text); // nothing here (sea, ice, towns)
+        slog(`${name}: ${Array.isArray(feats) ? feats.length : "?"} features for ${order.length} layers; asking layer by layer`);
+      }
+    }
     const parts = await Promise.all(layers.map(ask));
     return withSample(Object.assign({}, ...parts), (parts.find(x => hasValues(x)) || parts[0] || {}).sample || "");
   }
@@ -1272,7 +1318,7 @@
       let empty = null;
       for (const fmt of plan.fmts) {
         try {
-          const v = await gfiValues(name, layers, fmt, lat, lon);
+          const v = await gfiValues(name, layers, fmt, lat, lon, plan);
           if (hasValues(v)) {
             if (!soilFmtVerifiedNow) slog(`values read from ${fmt.fmt}, e.g. ${name}: ${v.sample || "(no sample)"}`);
             if (!soilFmtVerifiedNow) confirmSoilFmt(fmt.fmt);
