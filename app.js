@@ -1096,15 +1096,21 @@
     }
     return capsCache.get(name);
   }
-  const GFI_FORMATS = [["application/json", "json"], ["application/geo+json", "json"], ["geojson", "json"],
-    ["application/vnd.ogc.gml", "xml"], ["text/xml", "xml"], ["application/xml", "xml"], ["text/plain", "text"]];
-  function pickFormat(offered) {
+  // Reply formats in order of preference. GML (and other XML) answers for many layers in one request (8 requests per
+  // point); GeoJSON needs one request per layer (52), so it is the fallback; plain text last.
+  const GFI_FORMATS = [["application/vnd.ogc.gml", "xml"], ["text/xml", "xml"], ["application/xml", "xml"],
+    ["application/geo+json", "json"], ["application/json", "json"], ["geojson", "json"], ["text/plain", "text"]];
+  function pickFormats(offered) {
+    const out = [];
     for (const [f, kind] of GFI_FORMATS) {
-      const m = offered.find(o => o.toLowerCase().startsWith(f));
-      if (m) return { fmt: m, kind };
+      const m = offered.find(o => o.toLowerCase().startsWith(f) && !out.some(x => x.fmt === o));
+      if (m) out.push({ fmt: m, kind });
     }
-    return null;
+    return out;
   }
+  // The first format that has returned real values. Until one has, an empty reply (e.g. a GML reply this app can't
+  // match up) is retried in the next format; afterwards an empty reply just means "no data here" (sea, ice, towns).
+  let soilFmtConfirmed = null;
   const firstNumber = props => {
     for (const k of ["value_0", "value_list", "value", "pixel", "GRAY_INDEX", "band_1"]) if (props && props[k] != null && props[k] !== "") return parseFloat(props[k]);
     const v = props && Object.values(props).find(x => x !== "" && Number.isFinite(parseFloat(x)));
@@ -1197,35 +1203,51 @@
       // No answer in time: the server is out of reach. Otherwise (an odd reply, or only this request blocked) still try,
       // guessing GML replies and the usual layer names; failures there fall through to the colour-coded images.
       if (pc.reason.timeout && wc.reason.timeout) return null;
-      return { fmt: { fmt: "application/vnd.ogc.gml", kind: "xml" }, wrbLayers: null, propsQueryable: true, wrbQueryable: true };
+      return { fmts: [{ fmt: "application/vnd.ogc.gml", kind: "xml" }, { fmt: "application/geo+json", kind: "json" }], wrbLayers: null, propsQueryable: true, wrbQueryable: true };
     }
     const caps = pc.status === "fulfilled" ? pc.value : wc.value;
-    const fmt = pickFormat(caps.formats);
+    let fmts = pickFormats(caps.formats);
+    if (soilFmtConfirmed) fmts = [...fmts.filter(f => f.fmt === soilFmtConfirmed), ...fmts.filter(f => f.fmt !== soilFmtConfirmed)];
     const wrb = wc.status === "fulfilled" ? wc.value : null;
     const plan = {
-      fmt,
+      fmts,
       propsQueryable: pc.status === "fulfilled" ? [...pc.value.layers.values()].some(Boolean) : true,
       wrbQueryable: wrb ? [...wrb.layers.values()].some(Boolean) : true,
       // probability layers: the WRB group names the server lists (falls back to the known list)
       wrbLayers: wrb ? [...wrb.layers.keys()].filter(n => n !== "MostProbable" && soilInfo(n)) : null,
     };
-    slog(`map server: GetFeatureInfo formats ${caps.formats.join(", ") || "none"}; using ${fmt ? fmt.fmt : "images"}`);
+    plan.used = new Set();
+    slog(`map server: GetFeatureInfo formats ${caps.formats.join(", ") || "none"}`);
     return plan;
   }
+  const hasValues = obj => Object.values(obj).some(v => Number.isFinite(v) && v >= 0);
   // Values of `layers` in one map: GetFeatureInfo if possible, otherwise colour-coded images.
   async function mapValues(name, layers, rangeOf, plan, queryable, lat, lon) {
-    if (plan.fmt && queryable) {
-      try { return await gfiValues(name, layers, plan.fmt, lat, lon); }
-      catch (err) { slog(`${name}: GetFeatureInfo failed (${err.message}); trying images`); }
+    if (plan.fmts.length && queryable) {
+      let empty = null;
+      for (const fmt of plan.fmts) {
+        try {
+          const v = await gfiValues(name, layers, fmt, lat, lon);
+          if (hasValues(v)) { soilFmtConfirmed = soilFmtConfirmed || fmt.fmt; plan.used.add(fmt.fmt); return v; }
+          empty = empty || v;
+          if (soilFmtConfirmed === fmt.fmt) break; // this format is known to work: empty really means no data here
+          slog(`${name}: no values in ${fmt.fmt} reply; trying the next format`);
+        } catch (err) { slog(`${name}: GetFeatureInfo in ${fmt.fmt} failed (${err.message})`); }
+      }
+      if (empty) return empty;
+      slog(`${name}: trying images`);
     }
     if (soilFallback) throw new Error("the map server doesn't accept custom styles"); // seen by the overlay
     return imageValues(name, layers, rangeOf, lat, lon);
   }
   // Result shape shared by both sources: props = [{ name, value, unit }] (empty when the point has no soil data),
   // types = [[group, percent or null]] (null percent: only the most likely group is known); null = unavailable.
+  let soilFmtUsed = new Set();
   async function soilFromMapServer(lat, lon) {
     const plan = await soilPlan();
     if (!plan) return { props: null, types: null };
+    plan.used = plan.used || new Set();
+    soilFmtUsed = plan.used;
     const names = Object.keys(SOIL_PROPS);
     const typesP = soilTypesFromMapServer(plan, lat, lon);
     const replies = await Promise.allSettled(names.map(n =>
@@ -1301,7 +1323,7 @@
     setSoil("Loading…", "Loading…"); setLoading("soil", true);
     $("soilProps").hidden = true; $("soilTypes").innerHTML = "";
 
-    soilLog = [];
+    soilLog = []; soilFmtUsed = new Set();
     let { props, types } = await soilFromMapServer(lat, lon);
     if (token !== soilToken) return;
     const fromMap = { props: props != null, types: types != null };
@@ -1317,6 +1339,7 @@
     const ok = props != null && types != null;
     console[ok ? "info" : "warn"](`Terroir Map soil (${lat}, ${lon}): properties ${props == null ? "unavailable" : fromMap.props ? "from map server" : "from REST API"}, `
       + `soil groups ${types == null ? "unavailable" : fromMap.types ? "from map server" : "from REST API"}`
+      + (soilFmtUsed.size ? ` (${[...soilFmtUsed].join(" + ")})` : "")
       + (soilLog.length ? "\n  " + soilLog.join("\n  ") : ""));
 
     // Topsoil properties, depth-weighted over 0–30 cm
