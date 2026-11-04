@@ -52,6 +52,10 @@
 
 *, *::before, *::after { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; }
+/* iOS: keep text at the sizes set here when the phone is turned to landscape. */
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+/* Touch: no grey flash over buttons and links when tapped (focus and pressed states are styled instead). */
+a, button, [role="button"], label, summary { -webkit-tap-highlight-color: transparent; }
 body {
   background: var(--color-bg); color: var(--color-text);
   font: 400 14px/1.5 var(--font-body);
@@ -67,12 +71,18 @@ a:hover { color: var(--color-accent); }
 [hidden] { display: none !important; }
 
 /* — shell — */
-.app { display: flex; flex-direction: column; min-height: 100dvh; }
+/* viewport-fit=cover lets the page reach the screen edges on iPhones; keep content clear of the notch (landscape)
+   and the home indicator. */
+.app {
+  display: flex; flex-direction: column; min-height: 100dvh;
+  padding: 0 env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+}
 
 .layout { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 
 /* — map — */
-.map-pane { position: relative; flex: none; height: min(78.4vh, 708px); min-height: 380px; min-width: 0; background: var(--color-map-bg); } /* phones/tablets; desktop overrides below */
+/* svh = the height visible with the browser's toolbars showing (iOS vh assumes they are hidden); vh is the fallback. */
+.map-pane { position: relative; flex: none; height: min(78.4vh, 708px); height: min(78.4svh, 708px); min-height: 380px; min-width: 0; background: var(--color-map-bg); } /* phones/tablets; desktop overrides below */
 .map { position: absolute; inset: 0; }
 
 /* Top-left stack (map controls, 10px apart): messages such as "Loading regional data…" (hidden when
@@ -115,9 +125,10 @@ a:hover { color: var(--color-accent); }
 .hint.open { padding: 8px; background: rgba(243, 242, 242, .82); backdrop-filter: blur(6px); }
 .hint:not(.open) .hint-text { display: none; }
 .hint-btn {
-  flex: none; width: 24px; height: 24px; padding: 0; display: grid; place-items: center;
+  flex: none; width: 24px; height: 24px; padding: 0; display: grid; place-items: center; text-align: center;
+  -webkit-appearance: none; appearance: none;
   border: 0; border-radius: 50%; background: #fff; color: var(--color-text);
-  font: 800 14px/1 var(--font-body); cursor: pointer; box-shadow: 0 0 0 2px rgba(0, 0, 0, .1);
+  font: 800 14px/24px var(--font-body); cursor: pointer; box-shadow: 0 0 0 2px rgba(0, 0, 0, .1);
 }
 /* (selector beats MapLibre's own control-button hover, which would make it see-through) */
 .maplibregl-ctrl.hint .hint-btn:hover { background: var(--color-neutral-200); }
@@ -186,6 +197,10 @@ a:hover { color: var(--color-accent); }
   border: 0; border-radius: 50%; background: rgba(32, 30, 29, .08); color: var(--color-text); cursor: pointer;
 }
 .soil-nudge-close:hover { background: rgba(32, 30, 29, .16); }
+/* Round close buttons: the X is centred absolutely, so it sits in the middle whatever padding or layout a browser
+   (notably iOS Safari) gives buttons by default. */
+.soil-nudge-close, .soil-dlg-close { padding: 0; -webkit-appearance: none; appearance: none; line-height: 0; }
+.soil-nudge-close svg, .soil-dlg-close svg { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); display: block; }
 .soil-nudge-arrow {
   position: absolute; top: 100%; width: 0; height: 0; transform: translateX(-50%);
   border: 9px solid transparent; border-top-color: rgba(244, 244, 244, .85); border-bottom: 0;
@@ -232,7 +247,7 @@ a:hover { color: var(--color-accent); }
 }
 .soil-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .soil-panel-title { font-weight: 700; font-size: 13px; }
-.soil-legend { max-height: min(260px, 32vh); overflow-y: auto; background: #fff; border-radius: 4px; }
+.soil-legend { max-height: min(260px, 32vh); max-height: min(260px, 32svh); overflow-y: auto; background: #fff; border-radius: 4px; }
 .soil-legend img { display: block; max-width: 100%; height: auto; }
 .soil-legend-list { display: grid; padding: 4px; }
 .soil-legend-theme { padding: 6px 6px 2px; font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--color-neutral-700); }
@@ -279,7 +294,12 @@ select.control { padding-inline: 8px; }
   border-radius: var(--radius); box-shadow: var(--shadow-lg, 0 12px 32px rgba(45,43,43,.22));
 }
 .region-search { min-height: 40px; font-size: 14px; background: #fff; }
-.region-list { max-height: min(60vh, 460px); overflow-y: auto; display: grid; align-content: start; }
+/* Touch screens: iOS Safari zooms the whole page into any text field or drop-down with text under 16px (and stays
+   zoomed), so fields use 16px there. */
+@media (pointer: coarse) {
+  .control, .region-search, input, select, textarea { font-size: 16px; }
+}
+.region-list { max-height: min(60vh, 460px); max-height: min(60svh, 460px); overflow-y: auto; display: grid; align-content: start; }
 .country-btn, .region-item {
   display: flex; align-items: center; gap: 8px; width: 100%; border: 0; background: none; cursor: pointer;
   font: inherit; color: var(--color-text); text-align: left; border-radius: 4px;

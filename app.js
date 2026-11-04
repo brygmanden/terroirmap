@@ -163,9 +163,12 @@
     if (cur) expanded.add(cur.country);
     $("regionSearch").value = "";
     renderRegionList();
-    const sel = $("regionList").querySelector('[aria-current="true"]');
-    if (sel) sel.scrollIntoView({ block: "center" });
-    $("regionSearch").focus();
+    // Scroll the list (only the list, not the page) so the current region is in the middle.
+    const list = $("regionList"), sel = list.querySelector('[aria-current="true"]');
+    if (sel) list.scrollTop += sel.getBoundingClientRect().top - list.getBoundingClientRect().top - (list.clientHeight - sel.offsetHeight) / 2;
+    // Keyboard and mouse: type to search straight away. Touch: don't, as that would pop up the on-screen keyboard
+    // over the list; tapping the search box opens it.
+    if (!window.matchMedia("(pointer: coarse)").matches) $("regionSearch").focus();
   }
   function updateRegionButton() {
     const r = byId.get(state.regionId);
