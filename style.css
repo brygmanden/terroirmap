@@ -83,9 +83,9 @@ a:hover { color: var(--color-accent); }
 /* — map — */
 /* svh = the height visible with the browser's toolbars showing (iOS vh assumes they are hidden); vh is the fallback. */
 .map-pane { position: relative; flex: none; height: min(78.4vh, 708px); height: min(78.4svh, 708px); min-height: 380px; min-width: 0; background: var(--color-map-bg); } /* phones/tablets; desktop overrides below */
-/* iPhone (iOS Safari, phone widths): about 11% taller than the shared phone height, as svh there leaves the map shorter. */
+/* iPhone (iOS Safari, phone widths): 8% taller than the shared phone height, as svh there leaves the map shorter. */
 @supports (-webkit-touch-callout: none) {
-  @media (max-width: 600px) { .map-pane { height: min(87.2svh, 708px); } }
+  @media (max-width: 600px) { .map-pane { height: min(84.7svh, 708px); } }
 }
 .map { position: absolute; inset: 0; }
 
