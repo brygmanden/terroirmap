@@ -63,7 +63,7 @@ Examples: `?place=Ethiopia`, `?place=Yirgacheffe&isolate=1`, `?place=BR&isolate=
 | Soil Type | SoilGrids WRB reference soil group probabilities (top 5) |
 | Soil types map | Map overlay (slider in the map legend fades it in; the "Soil types" link shows the legend): most probable WRB soil group from the ISRIC SoilGrids WMS (`maps.isric.org`, layer `MostProbable`), with ISRIC's own colour legend. Works on the flat map and the 3D terrain |
 
-All the APIs are free, need no key and allow cross-origin requests. Open-Meteo is free for non-commercial use; commercial use needs their paid plan. SoilGrids is a beta service and is sometimes slow, so the app shows a message and carries on without it.
+All the APIs are free, need no key and allow cross-origin requests. Open-Meteo is free for non-commercial use; commercial use needs their paid plan. Soil values are read from SoilGrids' map server (`maps.isric.org`, the same server as the overlay) with a point query per map (WMS GetFeatureInfo: one request per property for its 0–30 cm depths, one for the soil groups). ISRIC's REST API (`rest.isric.org`) is paused and limited to 5 requests a minute, so it is used only if the map server fails. Each soil request gives up after 12 s, so the panel shows a message instead of waiting indefinitely.
 
 ## Settings you may want to change
 

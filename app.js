@@ -3,7 +3,7 @@
  * Data per clicked point:
  *   - Elevation:  Open-Meteo Elevation API (Copernicus DEM 90 m); slope and aspect from a 3×3 grid of it
  *   - Weather:    Open-Meteo Historical Weather API (ERA5 / ERA5-Land daily)
- *   - Soil:       ISRIC SoilGrids v2.0 (WRB classification + topsoil properties)
+ *   - Soil:       ISRIC SoilGrids v2.0 map server (WRB classification + topsoil properties; REST API as fallback)
  */
 (function () {
   const C = window.Climate;
@@ -1027,56 +1027,169 @@
     $("soilMsg").textContent = msg; $("soilMsg").hidden = !msg;
     $("soilTypeMsg").textContent = typeMsg; $("soilTypeMsg").hidden = !typeMsg;
   }
-  async function loadSoil() {
-    const token = ++soilToken;
-    setSoil("Loading…", "Loading…"); setLoading("soil", true);
-    $("soilProps").hidden = true; $("soilTypes").innerHTML = "";
+
+  // Soil data for the chosen point comes from ISRIC SoilGrids' map server (maps.isric.org, which also draws the soil
+  // overlay), by asking each map for its value at that point (WMS GetFeatureInfo). ISRIC's REST API (rest.isric.org)
+  // is paused and limited to 5 requests a minute, so it is only tried if the map server fails. Every request gives up
+  // after SOIL_TIMEOUT, so the panel never sits on "Loading…".
+  const SOIL_TIMEOUT = 12000;
+  const SOIL_DEPTHS = { "0-5cm": 5, "5-15cm": 10, "15-30cm": 15 }; // cm thickness, for the 0–30 cm average
+  // The maps store whole numbers; divide by these to get the units shown (as in the SoilGrids documentation).
+  const SOIL_UNITS = { phh2o: [10, ""], soc: [10, "g/kg"], clay: [10, "%"], sand: [10, "%"], silt: [10, "%"], nitrogen: [100, "g/kg"], cec: [10, "cmol₍c₎/kg"] };
+  const soilCache = new Map();
+  function fetchSoilText(url) {
+    if (soilCache.has(url)) return soilCache.get(url);
+    const ctrl = new AbortController(), timer = setTimeout(() => ctrl.abort(), SOIL_TIMEOUT);
+    const p = fetch(url, { signal: ctrl.signal })
+      .then(r => { if (!r.ok) throw new Error(`${r.status} ${r.statusText}`); return r.text(); })
+      .finally(() => clearTimeout(timer));
+    soilCache.set(url, p);
+    p.catch(() => soilCache.delete(url));
+    return p;
+  }
+  // Reads { layer: value } from a GetFeatureInfo reply in either of MapServer's built-in formats (GML or plain text).
+  // Throws if the reply is neither, so the caller can try the other format.
+  function parseFeatureInfo(text) {
+    const out = {};
+    if (/ServiceException/i.test(text)) throw new Error("map server error");
+    if (/^\s*</.test(text)) {
+      const doc = new DOMParser().parseFromString(text, "application/xml");
+      const root = doc.documentElement;
+      if (!root || root.getElementsByTagName("parsererror").length || !/msGMLOutput|FeatureCollection|FeatureInfo/i.test(root.localName)) throw new Error("unrecognised reply");
+      for (const el of root.getElementsByTagName("*")) {
+        if (!el.localName.endsWith("_layer")) continue;
+        const v = [...el.getElementsByTagName("*")].find(c => c.localName === "value_0" || c.localName === "value_list");
+        if (v) out[el.localName.slice(0, -"_layer".length)] = parseFloat(v.textContent);
+      }
+      return out;
+    }
+    if (!/GetFeatureInfo results/i.test(text)) throw new Error("unrecognised reply");
+    let layer = null;
+    for (const line of text.split(/\r?\n/)) {
+      const m = line.match(/^\s*Layer '([^']+)'/);
+      if (m) { layer = m[1]; continue; }
+      const v = line.match(/^\s*(?:value_0|value_list)\s*=\s*'([^']*)'/);
+      if (layer && v && !(layer in out)) out[layer] = parseFloat(v[1]);
+    }
+    return out;
+  }
+  // The value of each of `layers` in map `<name>.map` at the point. Uses the same EPSG:3857 grid as the overlay,
+  // asking for the middle pixel of a 3×3 image 120 m across (SoilGrids cells are 250 m).
+  async function soilPoint(name, layers, lat, lon) {
+    const R = 6378137, x = R * lon * Math.PI / 180, y = R * Math.log(Math.tan(Math.PI / 4 + lat * Math.PI / 360)), d = 60;
+    const L = layers.join(",");
+    const url = fmt => `https://maps.isric.org/mapserv?map=/map/${name}.map&SERVICE=WMS&VERSION=1.3.0&REQUEST=GetFeatureInfo`
+      + `&LAYERS=${L}&QUERY_LAYERS=${L}&STYLES=&CRS=EPSG:3857&BBOX=${(x - d).toFixed(1)},${(y - d).toFixed(1)},${(x + d).toFixed(1)},${(y + d).toFixed(1)}`
+      + `&WIDTH=3&HEIGHT=3&I=1&J=1&FEATURE_COUNT=1&INFO_FORMAT=${encodeURIComponent(fmt)}`;
+    const text = await fetchSoilText(url("application/vnd.ogc.gml")); // no answer or timed out: give up (no second wait)
+    try { return parseFeatureInfo(text); }
+    catch (err) {
+      const plain = await fetchSoilText(url("text/plain"));
+      try { return parseFeatureInfo(plain); }
+      catch (err2) { err2.replied = true; throw err2; } // the server answered, but with an error or an unknown format
+    }
+  }
+  // Result shape shared by both sources: props = [{ name, value, unit }] (empty when the point has no soil data),
+  // types = [[group, percent or null]] (null percent: only the most likely group is known).
+  async function soilFromMapServer(lat, lon) {
+    const names = Object.keys(SOIL_PROPS);
+    const typesP = soilTypesFromMapServer(lat, lon); // in parallel with the properties
+    const propReplies = await Promise.allSettled(names.map(n => soilPoint(n, Object.keys(SOIL_DEPTHS).map(dp => `${n}_${dp}_mean`), lat, lon)));
+    let props = null;
+    if (propReplies.some(r => r.status === "fulfilled")) {
+      props = [];
+      names.forEach((n, i) => {
+        if (propReplies[i].status !== "fulfilled") return;
+        let sum = 0, w = 0;
+        for (const [dp, t] of Object.entries(SOIL_DEPTHS)) {
+          const v = propReplies[i].value[`${n}_${dp}_mean`];
+          if (v == null || !Number.isFinite(v) || v < 0) continue; // −32768 = no data
+          sum += v * t; w += t;
+        }
+        if (w) props.push({ name: n, value: sum / w / SOIL_UNITS[n][0], unit: SOIL_UNITS[n][1] });
+      });
+    }
+    return { props, types: await typesP };
+  }
+  // Soil group probabilities (top 5), or just the most likely group if the probability layers can't be read.
+  async function soilTypesFromMapServer(lat, lon) {
+    try {
+      const v = await soilPoint("wrb", ["MostProbable", ...SOIL_CODES], lat, lon);
+      const types = SOIL_CODES.map(g => [g, v[g]]).filter(([, p]) => Number.isFinite(p) && p > 0 && p <= 100)
+        .sort((a, b) => b[1] - a[1]).slice(0, 5);
+      const top = SOIL_CODES[v.MostProbable];
+      return types.length ? types : top ? [[top, null]] : [];
+    } catch (err) {
+      if (!err.replied) return null; // no answer: don't wait again
+      try { // answered with an error (e.g. a layer name it doesn't know): ask for the most likely group alone
+        const top = SOIL_CODES[(await soilPoint("wrb", ["MostProbable"], lat, lon)).MostProbable];
+        return top ? [[top, null]] : [];
+      } catch (err2) { return null; }
+    }
+  }
+  async function soilFromRest(lat, lon, needProps, needTypes) {
     const base = "https://rest.isric.org/soilgrids/v2.0";
-    const ll = `lon=${f4(state.lon)}&lat=${f4(state.lat)}`;
-    const propUrl = `${base}/properties/query?${ll}`
-      + Object.keys(SOIL_PROPS).map(p => `&property=${p}`).join("")
-      + ["0-5cm", "5-15cm", "15-30cm"].map(dp => `&depth=${dp}`).join("") + "&value=mean";
+    const ll = `lon=${f4(lon)}&lat=${f4(lat)}`;
+    const propUrl = `${base}/properties/query?${ll}` + Object.keys(SOIL_PROPS).map(p => `&property=${p}`).join("")
+      + Object.keys(SOIL_DEPTHS).map(dp => `&depth=${dp}`).join("") + "&value=mean";
     const classUrl = `${base}/classification/query?${ll}&number_classes=5`;
-
-    const [props, cls] = await Promise.allSettled([getJSON(propUrl), getJSON(classUrl)]);
-    if (token !== soilToken) return;
-    setLoading("soil", false);
-
-    // Topsoil properties, depth-weighted over 0–30 cm
-    let msg;
-    if (props.status === "fulfilled") {
-      const weights = { "0-5cm": 5, "5-15cm": 10, "15-30cm": 15 };
-      const out = [];
-      for (const layer of props.value.properties?.layers || []) {
+    const [pr, cr] = await Promise.allSettled([
+      needProps ? fetchSoilText(propUrl).then(JSON.parse) : Promise.reject(new Error("not needed")),
+      needTypes ? fetchSoilText(classUrl).then(JSON.parse) : Promise.reject(new Error("not needed")),
+    ]);
+    let props = null, types = null;
+    if (pr.status === "fulfilled") {
+      props = [];
+      for (const layer of pr.value.properties?.layers || []) {
         let sum = 0, w = 0;
         for (const dp of layer.depths) {
           const v = dp.values?.mean;
           if (v == null) continue;
-          sum += v * weights[dp.label]; w += weights[dp.label];
+          sum += v * SOIL_DEPTHS[dp.label]; w += SOIL_DEPTHS[dp.label];
         }
-        if (!w) continue;
         const u = layer.unit_measure || {};
-        const val = sum / w / (u.d_factor || 1);
-        const unit = layer.name === "phh2o" ? "" : (u.target_units || "").replace("cmol(c)/kg", "cmol₍c₎/kg");
-        out.push(`<div class="soil-row"><span class="term" data-tip="soil.${esc(layer.name)}">${esc(SOIL_PROPS[layer.name] || layer.name)}</span>`
-          + `<span><strong>${val.toFixed(val < 10 ? 1 : 0)}</strong> <span class="unit">${esc(unit)}</span></span></div>`);
+        if (w) props.push({ name: layer.name, value: sum / w / (u.d_factor || 1), unit: SOIL_UNITS[layer.name]?.[1] ?? (u.target_units || "") });
       }
-      $("soilProps").innerHTML = out.join("");
-      $("soilProps").hidden = !out.length;
-      msg = out.length ? "" : "No soil data here (water, ice or built-up land).";
-    } else {
-      msg = "Soil data unavailable right now. SoilGrids may be busy; try again shortly.";
     }
+    if (cr.status === "fulfilled") types = (cr.value.wrb_class_probability || []).filter(p => p[1] > 0);
+    return { props, types };
+  }
+
+  async function loadSoil() {
+    const token = ++soilToken;
+    const { lat, lon } = state;
+    setSoil("Loading…", "Loading…"); setLoading("soil", true);
+    $("soilProps").hidden = true; $("soilTypes").innerHTML = "";
+
+    let { props, types } = await soilFromMapServer(lat, lon);
+    if (token !== soilToken) return;
+    if (props == null || types == null) { // map server failed for one or both: last resort, the REST API
+      const rest = await soilFromRest(lat, lon, props == null, types == null);
+      if (token !== soilToken) return;
+      props = props ?? rest.props; types = types ?? rest.types;
+    }
+    setLoading("soil", false);
+
+    // Topsoil properties, depth-weighted over 0–30 cm
+    let msg = "";
+    if (props == null) msg = "Soil data unavailable right now. SoilGrids may be busy; try again shortly.";
+    else if (!props.length) msg = "No soil data here (water, ice or built-up land).";
+    $("soilProps").innerHTML = (props || []).map(({ name, value, unit }) =>
+      `<div class="soil-row"><span class="term" data-tip="soil.${esc(name)}">${esc(SOIL_PROPS[name] || name)}</span>`
+      + `<span><strong>${value.toFixed(value < 10 ? 1 : 0)}</strong> <span class="unit">${esc(unit)}</span></span></div>`).join("");
+    $("soilProps").hidden = !(props && props.length);
 
     // WRB reference soil group probabilities
     let typeMsg = "";
-    const probs = cls.status === "fulfilled" ? (cls.value.wrb_class_probability || []).filter(p => p[1] > 0) : [];
-    if (probs.length) {
-      $("soilTypes").innerHTML = probs.map(([name, p]) =>
-        `<div class="prob"><button type="button" class="prob-name soil-link" data-soil="${esc(name)}" data-tip="wrb.${esc(name)}">${esc(name)}</button><span class="prob-track"><span class="prob-fill" style="width:${+p}%"></span></span><span class="prob-pct">${+p}%</span></div>`
+    if (types && types.length) {
+      $("soilTypes").innerHTML = types.map(([name, p]) =>
+        `<div class="prob"><button type="button" class="prob-name soil-link" data-soil="${esc(name)}" data-tip="wrb.${esc(name)}">${esc(name)}</button>`
+        + (p == null ? `<span class="prob-track"></span><span class="prob-pct">top</span>`
+          : `<span class="prob-track"><span class="prob-fill" style="width:${+p}%"></span></span><span class="prob-pct">${+p}%</span>`) + `</div>`
       ).join("");
+      if (types[0][1] == null) typeMsg = "Most likely soil group (probabilities unavailable).";
     } else {
-      typeMsg = cls.status === "fulfilled" ? "No soil classification here." : "Soil classification unavailable right now.";
+      typeMsg = types ? "No soil classification here." : "Soil classification unavailable right now.";
     }
     setSoil(msg, typeMsg);
   }
