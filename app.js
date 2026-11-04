@@ -1041,8 +1041,8 @@
   //   1. GetFeatureInfo, "what is the value here?", in a format the server offers (JSON, GML/XML or plain text), or
   //   2. if it can't answer that, a 3×3-pixel GetMap image drawn with a custom style in which every value has its own
   //      colour (the same kind of request as the overlay), and reads the value back from the middle pixel.
-  // The REST API is the last resort. Every request has a time limit, and each step is written to the browser console
-  // ("Terroir Map soil: …") so problems can be diagnosed on the live site.
+  // The REST API is the last resort. Every request has a time limit. Opening the page with ?soildebug=1 writes each
+  // step to the browser console ("Terroir Map soil: …") to diagnose problems on the live site.
   const SOIL_SERVER = "https://maps.isric.org/mapserv";
   const SOIL_TIMEOUT = 10000;
   const SOIL_DEPTHS = { "0-5cm": 5, "5-15cm": 10, "15-30cm": 15 }; // cm thickness, for the 0–30 cm average
@@ -1054,6 +1054,7 @@
     silt: { div: 10, unit: "%", max: 1000, step: 16 }, nitrogen: { div: 100, unit: "g/kg", max: 4095, step: 64 },
     cec: { div: 10, unit: "cmol₍c₎/kg", max: 1023, step: 16 },
   };
+  const SOIL_DEBUG = params.has("soildebug"); // ?soildebug=1 writes what the soil loading did to the browser console
   let soilLog = [];
   const slog = msg => soilLog.push(msg);
   const replied = msg => Object.assign(new Error(msg), { replied: true }); // the server answered, but not usefully
@@ -1213,6 +1214,9 @@
   // file's), which its plain-text replies show by name. That order is learned once per map from one plain-text reply
   // (and remembered in this browser); then a single GeoJSON request answers for all of a map's layers.
   const SOIL_ORDER_KEY = "terroirmap.soilLayerOrder";
+  const SOIL_MULTI_KEY = "terroirmap.soilGeoJsonMulti"; // "no" once a multi-layer GeoJSON reply proved unreadable
+  let soilMultiJson = true;
+  try { soilMultiJson = localStorage.getItem(SOIL_MULTI_KEY) !== "no"; } catch (err) { /* assume yes */ }
   let soilOrders = {};
   try { soilOrders = JSON.parse(localStorage.getItem(SOIL_ORDER_KEY) || "{}") || {}; } catch (err) { soilOrders = {}; }
   async function layerOrder(name, layers, plan, lat, lon) {
@@ -1230,25 +1234,66 @@
       return order;
     } catch (err) { return null; }
   }
+  // Every JSON value in a reply: normally one, but some servers write one FeatureCollection per layer back to back.
+  function jsonValues(text) {
+    try { return [JSON.parse(text)]; } catch (err) { /* several values, or not JSON */ }
+    const out = [];
+    let depth = 0, start = -1, inStr = false, esc = false;
+    for (let i = 0; i < text.length; i++) {
+      const c = text[i];
+      if (inStr) { if (esc) esc = false; else if (c === "\\") esc = true; else if (c === '"') inStr = false; continue; }
+      if (c === '"') inStr = true;
+      else if (c === "{" || c === "[") { if (depth++ === 0) start = i; }
+      else if ((c === "}" || c === "]") && depth > 0 && --depth === 0) {
+        try { out.push(JSON.parse(text.slice(start, i + 1))); } catch (err) { return []; }
+      }
+    }
+    return out;
+  }
+  // { layer: value } from the GeoJSON reply to a multi-layer request, or null if it can't be matched safely:
+  //  - several FeatureCollections (one per layer): matched by their "name" if they all name a requested layer,
+  //    otherwise by the server's layer order when there is one per layer;
+  //  - one FeatureCollection: one feature per layer, in the server's layer order (none at all: no data here).
+  function matchGeoJson(values, order) {
+    const norm = n => String(n).toLowerCase().replace(/[^a-z0-9]/g, "");
+    const byNorm = new Map(order.map(l => [norm(l), l]));
+    const cols = values.flatMap(v => (Array.isArray(v) ? v : [v])).filter(v => v && Array.isArray(v.features));
+    const out = {};
+    const take = (layer, f) => { if (layer && f) out[layer] = firstNumber(f.properties); };
+    if (cols.length > 1) {
+      if (cols.every(c => c.name && byNorm.has(norm(c.name)))) cols.forEach(c => take(byNorm.get(norm(c.name)), c.features[0]));
+      else if (cols.length === order.length) cols.forEach((c, i) => take(order[i], c.features[0]));
+      else return null;
+      return out;
+    }
+    if (cols.length === 1) {
+      const feats = cols[0].features;
+      if (feats.length === 0) return out;
+      // Features that name their layer (some servers add it as a property) are matched by that name.
+      const named = feats.map(f => f.properties && (f.properties.layer || f.properties.layer_name || f.properties.name));
+      if (named.every(n => n && byNorm.has(norm(n)))) { feats.forEach((f, i) => take(byNorm.get(norm(named[i])), f)); return out; }
+      if (feats.length !== order.length) return null;
+      feats.forEach((f, i) => take(order[i], f));
+      return out;
+    }
+    return null;
+  }
   async function gfiValues(name, layers, fmt, lat, lon, plan) {
     const ask = list => soilFetch(gfiUrl(name, list, fmt.fmt, lat, lon)).then(t => parseGfi(t, fmt.kind, list.split(",")));
     if (fmt.kind !== "json") return ask(layers.join(","));
-    if (layers.length > 1) {
+    if (layers.length > 1 && soilMultiJson) {
       const order = await layerOrder(name, layers, plan, lat, lon);
       if (order) {
         const text = await soilFetch(gfiUrl(name, order.join(","), fmt.fmt, lat, lon));
         if (/ServiceException/i.test(text)) throw replied(`server error: ${snippet(text)}`);
-        let feats = null;
-        try { feats = JSON.parse(text).features; } catch (err) { feats = null; }
-        // One feature per layer: match them up in the server's order. Any other count (e.g. a layer with no data
-        // here) can't be matched safely, so fall through to one request per layer.
-        if (Array.isArray(feats) && feats.length === order.length) {
-          const out = {};
-          order.forEach((l, i) => { out[l] = firstNumber(feats[i].properties); });
-          return withSample(out, JSON.stringify(feats[0].properties));
+        const values = jsonValues(text);
+        const out = matchGeoJson(values, order);
+        if (out) return withSample(out, rawSample(text));
+        if (!values.some(v => v && (Array.isArray(v) || Array.isArray(v.features)))) { // unreadable: don't try this again
+          soilMultiJson = false;
+          try { localStorage.setItem(SOIL_MULTI_KEY, "no"); } catch (err) { /* only for this visit */ }
         }
-        if (Array.isArray(feats) && feats.length === 0) return withSample({}, text); // nothing here (sea, ice, towns)
-        slog(`${name}: ${Array.isArray(feats) ? feats.length : "?"} features for ${order.length} layers; asking layer by layer`);
+        slog(`${name}: couldn't match a ${order.length}-layer GeoJSON reply to its layers; asking layer by layer. Reply: ${rawSample(text)}`);
       }
     }
     const parts = await Promise.all(layers.map(ask));
@@ -1431,9 +1476,9 @@
       props = props ?? rest.props; types = types ?? rest.types;
     }
     setLoading("soil", false);
-    // Diagnosis for the browser console: what was tried and what worked.
+    // Diagnosis for the browser console, only when the page is opened with ?soildebug=1: what was tried and what worked.
     const ok = props != null && types != null;
-    console[ok ? "info" : "warn"](`Terroir Map soil (${lat}, ${lon}): properties ${props == null ? "unavailable" : fromMap.props ? "from map server" : "from REST API"}, `
+    if (SOIL_DEBUG) console[ok ? "info" : "warn"](`Terroir Map soil (${lat}, ${lon}): properties ${props == null ? "unavailable" : fromMap.props ? "from map server" : "from REST API"}, `
       + `soil groups ${types == null ? "unavailable" : fromMap.types ? "from map server" : "from REST API"}`
       + (soilFmtUsed.size ? ` (${[...soilFmtUsed].join(" + ")})` : "")
       + (soilLog.length ? "\n  " + soilLog.join("\n  ") : ""));
