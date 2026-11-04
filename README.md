@@ -46,7 +46,7 @@ Two URL parameters open the map on a chosen place:
 | `place` | A country name or ISO code (`Ethiopia`, `ET`), or a region name, alias or id (`Yirgacheffe`, `Cerrado`, `ET-05`). Case, accents, spaces and punctuation are ignored. A repeated region name can be narrowed with its country: `Eastern Province, Rwanda` | Zooms to the region's outline, or for a country to all its coffee regions, and loads the data for that region (for a country, the coffee region nearest the middle of its regions) |
 | `isolate` | `1` or `0` (`true`/`false` also work) | With a recognised `place`, `1` limits the region drop-down to the place, hides region dots, farms, mills and auctions outside it (with 3 km allowance for simplified borders) and dims the map around it. Ignored without a recognised `place` |
 
-Examples: `?place=Ethiopia`, `?place=Yirgacheffe&isolate=1`, `?place=BR&isolate=1`. An unrecognised `place` is ignored (the default view loads, and a warning is written to the browser console).
+Examples: `?place=Ethiopia`, `?place=Yirgacheffe&isolate=1`, `?place=BR&isolate=1`. A printable guide with all country codes and region IDs: [`docs/terroir-map-link-guide.pdf`](docs/terroir-map-link-guide.pdf). An unrecognised `place` is ignored (the default view loads, and a warning is written to the browser console).
 
 ## What each output means
 
