@@ -30,11 +30,23 @@ Any static host works too, for example GitHub Pages, Netlify or Cloudflare Pages
 | `glossary.js` | Plain-language explanations for the hover tooltips (terms, abbreviations, soil groups, Köppen letters). Elements opt in with `data-tip="key"` |
 | `data/outlines/<CC>.json` | Region outlines, one file per country (ISO code), loaded only when a region in that country is selected |
 | `data/farms.geojson` | 3,959 coffee farms, mills and auctions with a location (from `global_coffee_farms_mills_auctions.csv`): type, name, up to three varieties (farms only) and how exact the position is. Contact details and owner names are left out |
+| `data/countries.json` | Borders of the 60 coffee countries (Natural Earth 1:50m, public domain), keyed by ISO code; loaded only for `?place=<country>&isolate=1` |
 | `assets/fonts/bh/` | Barista Hustle web fonts (Head, NoBH) used by the page |
 | `assets/fonts/glyphs/` | Map-label glyphs (SDF `.pbf`) built from NoBH Regular/Bold: Latin, Thai (system Thai font fallback) and punctuation ranges |
 | `soils.js` | The 32 WRB soil groups from Prof Steven Abbott: map colour, theme, descriptions, drainage/nutrients/acidity/depth, coffee suitability and a typical horizon profile. Drives the soil map colours, legend, tooltips and the soil details popup |
 | `regions.js` | 389 coffee regions in 60 countries, sorted by country then region: name, other names, main species, label point and the admin units behind each outline |
 | `docs/original-app.md` | Notes on the original app's interface |
+
+## Link to a place
+
+Two URL parameters open the map on a chosen place:
+
+| Parameter | Values | Effect |
+|---|---|---|
+| `place` | A country name or ISO code (`Ethiopia`, `ET`), or a region name, alias or id (`Yirgacheffe`, `Cerrado`, `ET-05`). Case, accents, spaces and punctuation are ignored. A repeated region name can be narrowed with its country: `Eastern Province, Rwanda` | Zooms to the region's outline, or for a country to all its coffee regions, and loads the data for that region (for a country, the coffee region nearest the middle of its regions) |
+| `isolate` | `1` or `0` (`true`/`false` also work) | With a recognised `place`, `1` limits the region drop-down to the place, hides region dots, farms, mills and auctions outside it (with 3 km allowance for simplified borders) and dims the map around it. Ignored without a recognised `place` |
+
+Examples: `?place=Ethiopia`, `?place=Yirgacheffe&isolate=1`, `?place=BR&isolate=1`. An unrecognised `place` is ignored (the default view loads, and a warning is written to the browser console).
 
 ## What each output means
 

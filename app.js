@@ -47,8 +47,51 @@
   const wide = window.matchMedia("(min-width: 960px)").matches;
 
   const DEFAULT_REGION = R.find(r => /^Yirgacheffe/.test(r.name)) || R[0];
+
+  // ---------- Start place from the URL ----------
+  // ?place=<country or region> opens the map on that place. It matches country names and ISO codes (Ethiopia, ET),
+  // region names, aliases and ids (Yirgacheffe, ET-05), ignoring case, accents, spaces and punctuation; a repeated
+  // region name can be narrowed with its country ("Eastern Province, Kenya"). Unrecognised values are ignored.
+  // &isolate=1 (only with a recognised place) limits the region list to the place, hides region dots, farms, mills
+  // and auctions outside it, and dims the map around it. isolate=0 (or leaving it out) shows everything.
+  const placeKey = s => s.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  function resolvePlace(raw) {
+    const q = raw ? placeKey(raw) : "";
+    if (!q) return null;
+    const asCountry = cc => ({ kind: "country", cc, name: R.find(r => r.cc === cc).country, regions: R.filter(r => r.cc === cc) });
+    const asRegion = r => ({ kind: "region", cc: r.cc, name: r.name, region: r, regions: [r] });
+    const findRegion = (list, k) => list.find(r => placeKey(r.id) === k) || list.find(r => placeKey(r.name) === k)
+      || list.find(r => r.aka && r.aka.split(/[;,]/).some(a => placeKey(a) === k));
+    const byId = R.find(r => placeKey(r.id) === q);
+    if (byId) return asRegion(byId);
+    const c = R.find(r => r.cc.toLowerCase() === q || placeKey(r.country) === q);
+    if (c) return asCountry(c.cc);
+    const r = findRegion(R, q);
+    if (r) return asRegion(r);
+    const parts = raw.split(","); // "Region, Country"
+    if (parts.length === 2) {
+      const pc = resolvePlace(parts[1]);
+      const pr = pc && pc.kind === "country" && findRegion(pc.regions, placeKey(parts[0]));
+      if (pr) return asRegion(pr);
+    }
+    return null;
+  }
+  const params = new URLSearchParams(location.search);
+  const PLACE = resolvePlace(params.get("place"));
+  const ISOLATE = !!PLACE && /^(1|true|yes)$/i.test((params.get("isolate") || "").trim());
+  if (params.get("place") && !PLACE) console.warn(`Terroir Map: place "${params.get("place")}" was not recognised.`);
+  // The point whose data loads first: the region itself, or for a country the coffee region nearest the middle of its regions.
+  function startRegion() {
+    if (!PLACE) return DEFAULT_REGION;
+    if (PLACE.region) return PLACE.region;
+    const n = PLACE.regions.length, mLat = PLACE.regions.reduce((a, r) => a + r.lat, 0) / n, mLon = PLACE.regions.reduce((a, r) => a + r.lon, 0) / n;
+    return PLACE.regions.reduce((best, r) => ((r.lat - mLat) ** 2 + (r.lon - mLon) ** 2 < (best.lat - mLat) ** 2 + (best.lon - mLon) ** 2 ? r : best));
+  }
+  const START = startRegion();
+  const PICKABLE = ISOLATE ? PLACE.regions : R; // regions offered in the drop-down and shown as dots
+
   const state = {
-    regionId: DEFAULT_REGION.id, lat: DEFAULT_REGION.lat, lon: DEFAULT_REGION.lon,
+    regionId: START.id, lat: START.lat, lon: START.lon,
     from: 0, to: 6, years: 5, metric: "rain",
     alt: null, altLoading: true, slope: null, aspect: null,
     groups: null, yearSpan: null, loadSpan: null, wLoading: true, wError: false,
@@ -82,7 +125,7 @@
   // ---------- Region picker: countries expand to show their regions ----------
   const byId = new Map(R.map(r => [r.id, r]));
   const countries = [];
-  for (const r of R) {
+  for (const r of PICKABLE) {
     const last = countries[countries.length - 1];
     if (last && last.name === r.country) last.regions.push(r);
     else countries.push({ name: r.country, regions: [r] });
@@ -206,7 +249,7 @@
   };
   const regionGeo = {
     type: "FeatureCollection",
-    features: R.map(r => ({ type: "Feature", properties: { id: r.id, name: r.name, country: r.country }, geometry: { type: "Point", coordinates: [r.lon, r.lat] } })),
+    features: PICKABLE.map(r => ({ type: "Feature", properties: { id: r.id, name: r.name, country: r.country }, geometry: { type: "Point", coordinates: [r.lon, r.lat] } })),
   };
   const pointGeo = (lat, lon) => ({ type: "FeatureCollection", features: [{ type: "Feature", properties: {}, geometry: { type: "Point", coordinates: [lon, lat] } }] });
   const beltVis = CONFIG.showBelt ? "visible" : "none";
@@ -238,7 +281,9 @@
         tropics: { type: "geojson", data: tropicLines },
         regions: { type: "geojson", data: regionGeo },
         picked: { type: "geojson", data: pointGeo(state.lat, state.lon) },
-        farms: { type: "geojson", data: new URL("data/farms.geojson", location.href).href },
+        // When isolating, farms start empty and are filled with only those inside the place (see isolatePlace).
+        farms: { type: "geojson", data: ISOLATE ? { type: "FeatureCollection", features: [] } : new URL("data/farms.geojson", location.href).href },
+        mask: { type: "geojson", data: { type: "FeatureCollection", features: [] }, ...(ISOLATE && PLACE.kind === "country" ? { attribution: "Borders: Natural Earth" } : {}) },
         outline: { type: "geojson", data: { type: "FeatureCollection", features: [] }, attribution: "Region outlines: © OpenStreetMap contributors (ODbL) via Overture Maps, IBGE, geoBoundaries" },
       },
       layers: [
@@ -247,6 +292,8 @@
         { id: "soil", type: "raster", source: "soil", layout: { visibility: "none" }, paint: { "raster-opacity": CONFIG.soilOpacity, "raster-fade-duration": 150 } },
         { id: "belt", type: "fill", source: "belt", layout: { visibility: beltVis }, paint: { "fill-color": "rgba(196,39,77,0.07)" } },
         { id: "tropics", type: "line", source: "tropics", layout: { visibility: beltVis }, paint: { "line-color": ACCENT, "line-width": 2, "line-dasharray": [3, 2] } },
+        // isolate=1: everything outside the place is dimmed.
+        { id: "mask", type: "fill", source: "mask", paint: { "fill-color": "rgba(20, 19, 18, 0.6)" } },
         // Selected region's outline: a faint dark casing keeps the light dashed line readable on bright imagery.
         { id: "outline-casing", type: "line", source: "outline", layout: { "line-join": "round" }, paint: { "line-color": "rgba(32,30,29,0.45)", "line-width": 4 } },
         { id: "outline", type: "line", source: "outline", layout: { "line-join": "round" }, paint: { "line-color": OUTLINE, "line-width": 2, "line-dasharray": [3, 2] } },
@@ -582,7 +629,83 @@
   updateRegionButton();
   $("lat").value = state.lat.toFixed(2);
   $("lon").value = state.lon.toFixed(2);
-  showRegion(state.regionId);
+  showRegion(state.regionId, PLACE && PLACE.kind === "region"); // a region from ?place= is zoomed to its outline
+  if (PLACE && PLACE.kind === "country") fitCountry(PLACE);
+  if (ISOLATE) isolatePlace(PLACE);
+
+  // ---------- ?place= a country: frame all its coffee regions ----------
+  async function fitCountry(place) {
+    const geoms = await Promise.all(place.regions.map(r => loadOutline(r).catch(() => null)));
+    const b = new maplibregl.LngLatBounds();
+    place.regions.forEach((r, i) => (geoms[i] ? b.extend(geomBounds(geoms[i])) : b.extend([r.lon, r.lat])));
+    map.fitBounds(b, { padding: 40, pitch: 45, maxZoom: 9, essential: true });
+  }
+
+  // ---------- isolate=1: dim the map outside the place and hide farms, mills and auctions outside it ----------
+  // A country uses its border (data/countries.json, Natural Earth 1:50m); a region uses its outline. A country
+  // without a border in that file (Réunion) uses the outlines of its coffee regions instead.
+  async function placeGeometry(place) {
+    if (place.kind === "region") return loadOutline(place.region);
+    try {
+      const res = await fetch("data/countries.json");
+      if (res.ok) { const d = await res.json(); if (d[place.cc]) return d[place.cc]; }
+    } catch (err) { /* fall back to the region outlines */ }
+    const parts = (await Promise.all(place.regions.map(r => loadOutline(r).catch(() => null)))).filter(Boolean);
+    const polys = parts.flatMap(g => (g.type === "Polygon" ? [g.coordinates] : g.coordinates));
+    return polys.length ? { type: "MultiPolygon", coordinates: polys } : null;
+  }
+  const polygonsOf = g => (g.type === "Polygon" ? [g.coordinates] : g.coordinates);
+  function inRing(x, y, ring) {
+    let inside = false;
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      const [xi, yi] = ring[i], [xj, yj] = ring[j];
+      if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) inside = !inside;
+    }
+    return inside;
+  }
+  // Inside the place, or within `km` of its edge (borders are simplified, so coastal and border farms can sit just outside).
+  function placeTest(geom, km) {
+    const polys = polygonsOf(geom).map(p => {
+      const b = geomBounds({ coordinates: p[0] });
+      return { rings: p, w: b.getWest(), e: b.getEast(), s: b.getSouth(), n: b.getNorth() };
+    });
+    const tol = km / 111.32; // degrees of latitude
+    const nearRing = (x, y, ring, k) => {
+      for (let i = 1; i < ring.length; i++) {
+        const ax = ring[i - 1][0] * k, ay = ring[i - 1][1], bx = ring[i][0] * k, by = ring[i][1], px = x * k;
+        const dx = bx - ax, dy = by - ay, len = dx * dx + dy * dy;
+        const t = len ? Math.max(0, Math.min(1, ((px - ax) * dx + (y - ay) * dy) / len)) : 0;
+        if ((ax + t * dx - px) ** 2 + (ay + t * dy - y) ** 2 < tol * tol) return true;
+      }
+      return false;
+    };
+    return (x, y) => {
+      const k = Math.cos(y * Math.PI / 180), tx = tol / Math.max(k, 0.1);
+      for (const p of polys) {
+        if (x < p.w - tx || x > p.e + tx || y < p.s - tol || y > p.n + tol) continue;
+        if (inRing(x, y, p.rings[0]) && !p.rings.slice(1).some(h => inRing(x, y, h))) return true;
+        if (nearRing(x, y, p.rings[0], k)) return true;
+      }
+      return false;
+    };
+  }
+  async function isolatePlace(place) {
+    const [geom, farms] = await Promise.all([
+      placeGeometry(place).catch(() => null),
+      fetch("data/farms.geojson").then(r => r.json()).catch(() => null),
+    ]);
+    let farmData = farms || { type: "FeatureCollection", features: [] }, mask = { type: "FeatureCollection", features: [] };
+    if (geom) {
+      const inside = placeTest(geom, 3);
+      farmData = { type: "FeatureCollection", features: farmData.features.filter(f => inside(...f.geometry.coordinates)) };
+      // One world-sized polygon with a hole for each part of the place (holes kept just inside ±180° so they never touch the edge).
+      const clampX = c => [Math.max(-179.999, Math.min(179.999, c[0])), c[1]];
+      const world = [[-180, -85], [180, -85], [180, 85], [-180, 85], [-180, -85]];
+      mask.features.push({ type: "Feature", properties: {}, geometry: { type: "Polygon", coordinates: [world, ...polygonsOf(geom).map(p => p[0].map(clampX))] } });
+    }
+    const apply = () => { map.getSource("farms").setData(farmData); map.getSource("mask").setData(mask); };
+    map.getSource("mask") ? apply() : map.once("load", apply);
+  }
 
   // "Loading regional data…" shows while any of altitude, weather or soil is still loading.
   const pending = new Set();
