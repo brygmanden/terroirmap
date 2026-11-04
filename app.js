@@ -1096,10 +1096,11 @@
     }
     return capsCache.get(name);
   }
-  // Reply formats in order of preference. GML (and other XML) answers for many layers in one request (8 requests per
-  // point); GeoJSON needs one request per layer (52), so it is the fallback; plain text last.
-  const GFI_FORMATS = [["application/vnd.ogc.gml", "xml"], ["text/xml", "xml"], ["application/xml", "xml"],
-    ["application/geo+json", "json"], ["application/json", "json"], ["geojson", "json"], ["text/plain", "text"]];
+  // Reply formats in order of preference. GML/XML and plain text answer for many layers in one request (8 requests per
+  // point); GeoJSON needs one request per layer (52), so it comes last. (ISRIC's GML replies carry no values, so
+  // there the app settles on plain text or GeoJSON, and remembers which in this browser.)
+  const GFI_FORMATS = [["application/vnd.ogc.gml", "xml"], ["text/xml", "xml"], ["application/xml", "xml"], ["text/plain", "text"],
+    ["application/geo+json", "json"], ["application/json", "json"], ["geojson", "json"]];
   function pickFormats(offered) {
     const out = [];
     for (const [f, kind] of GFI_FORMATS) {
@@ -1110,7 +1111,17 @@
   }
   // The first format that has returned real values. Until one has, an empty reply (e.g. a GML reply this app can't
   // match up) is retried in the next format; afterwards an empty reply just means "no data here" (sea, ice, towns).
+  // Remembered in this browser (if storage is available), so later visits go straight to the working format.
+  const SOIL_FMT_KEY = "terroirmap.soilFormat";
   let soilFmtConfirmed = null;
+  try { soilFmtConfirmed = localStorage.getItem(SOIL_FMT_KEY); } catch (err) { /* storage blocked: work it out again */ }
+  let soilFmtVerifiedNow = false; // true once the confirmed format has returned values during this visit
+  function confirmSoilFmt(fmt) {
+    soilFmtVerifiedNow = true;
+    if (soilFmtConfirmed === fmt) return;
+    soilFmtConfirmed = fmt;
+    try { localStorage.setItem(SOIL_FMT_KEY, fmt); } catch (err) { /* fine: only remembered for this visit */ }
+  }
   // The pixel value among a feature's attributes: a known name if present, otherwise the first number that isn't a
   // coordinate, id or colour.
   const firstNumber = props => {
@@ -1168,14 +1179,22 @@
       return withSample(out, new XMLSerializer().serializeToString(first).replace(/ xmlns(:\w+)?="[^"]*"/g, ""));
     }
     if (!/GetFeatureInfo results/i.test(text)) throw replied(`unexpected reply: ${snippet(text)}`);
-    let layer = null;
+    // Plain text: "Layer 'name'" headings, each followed by "  key = 'value'" lines for its feature(s).
+    const norm = n => String(n).toLowerCase().replace(/[^a-z0-9]/g, "");
+    const byNorm = new Map(layers.map(l => [norm(l), l]));
+    const props = {};
+    let layer = null, firstSection = "";
     for (const line of text.split(/\r?\n/)) {
       const m = line.match(/^\s*Layer '([^']+)'/);
-      if (m) { layer = m[1]; continue; }
-      const v = line.match(/^\s*(?:value_0|value_list)\s*=\s*'([^']*)'/);
-      if (layer && v && !(layer in out)) out[layer] = parseFloat(v[1]);
+      if (m) { layer = byNorm.get(norm(m[1])) || (layers.length === 1 ? layers[0] : null); continue; }
+      const kv = line.match(/^\s*([\w.:-]+)\s*=\s*'([^']*)'/);
+      if (layer && kv) {
+        (props[layer] = props[layer] || {})[kv[1]] ??= kv[2];
+        if (!firstSection || firstSection.startsWith(layer + ":")) firstSection = firstSection || `${layer}:`, firstSection += ` ${kv[1]}='${kv[2]}'`;
+      }
     }
-    return out;
+    for (const [l, p] of Object.entries(props)) { const v = firstNumber(p); if (Number.isFinite(v)) out[l] = v; }
+    return withSample(out, firstSection || text);
   }
   // A 3×3-pixel image 120 m across centred on the point, in the overlay's EPSG:3857 grid (SoilGrids cells are 250 m).
   function pointBox(lat, lon) {
@@ -1186,7 +1205,8 @@
     const ask = list => soilFetch(mapUrl(name, `REQUEST=GetFeatureInfo&LAYERS=${list}&QUERY_LAYERS=${list}&STYLES=&${pointBox(lat, lon)}`
       + `&I=1&J=1&FEATURE_COUNT=1&INFO_FORMAT=${encodeURIComponent(fmt.fmt)}`)).then(t => parseGfi(t, fmt.kind, list.split(",")));
     if (fmt.kind !== "json") return ask(layers.join(","));
-    return Object.assign({}, ...(await Promise.all(layers.map(ask))));
+    const parts = await Promise.all(layers.map(ask));
+    return withSample(Object.assign({}, ...parts), (parts.find(x => hasValues(x)) || parts[0] || {}).sample || "");
   }
   // Colour code for the image fallback: value v is drawn as red = v ÷ 256, green = v mod 256. Style entries every
   // `step` (and at the end of each block of 256) let the server's colour ramp hit every whole number exactly; values
@@ -1254,11 +1274,13 @@
         try {
           const v = await gfiValues(name, layers, fmt, lat, lon);
           if (hasValues(v)) {
-            if (!soilFmtConfirmed) slog(`values read from ${fmt.fmt}, e.g. ${name}: ${v.sample || "(no sample)"}`);
-            soilFmtConfirmed = soilFmtConfirmed || fmt.fmt; plan.used.add(fmt.fmt); return v;
+            if (!soilFmtVerifiedNow) slog(`values read from ${fmt.fmt}, e.g. ${name}: ${v.sample || "(no sample)"}`);
+            if (!soilFmtVerifiedNow) confirmSoilFmt(fmt.fmt);
+            plan.used.add(fmt.fmt); return v;
           }
           empty = empty || v;
-          if (soilFmtConfirmed === fmt.fmt) break; // this format is known to work: empty really means no data here
+          // This format has returned values during this visit: an empty reply really means no data here.
+          if (soilFmtVerifiedNow && soilFmtConfirmed === fmt.fmt) break;
           slog(`${name}: no values in ${fmt.fmt} reply; trying the next format. Reply: ${v.sample || "(empty)"}`);
         } catch (err) { slog(`${name}: GetFeatureInfo in ${fmt.fmt} failed (${err.message})`); }
       }
