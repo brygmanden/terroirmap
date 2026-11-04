@@ -1111,11 +1111,17 @@
   // The first format that has returned real values. Until one has, an empty reply (e.g. a GML reply this app can't
   // match up) is retried in the next format; afterwards an empty reply just means "no data here" (sea, ice, towns).
   let soilFmtConfirmed = null;
+  // The pixel value among a feature's attributes: a known name if present, otherwise the first number that isn't a
+  // coordinate, id or colour.
   const firstNumber = props => {
-    for (const k of ["value_0", "value_list", "value", "pixel", "GRAY_INDEX", "band_1"]) if (props && props[k] != null && props[k] !== "") return parseFloat(props[k]);
-    const v = props && Object.values(props).find(x => x !== "" && Number.isFinite(parseFloat(x)));
-    return v == null ? NaN : parseFloat(v);
+    if (!props) return NaN;
+    for (const k of ["value_0", "value_list", "value", "pixel", "GRAY_INDEX", "band_1", "Band1"]) if (props[k] != null && props[k] !== "") return parseFloat(props[k]);
+    const v = Object.entries(props).find(([k, x]) => !/^(x|y|class|red|green|blue|fid|gml_id|id|name)$/i.test(k) && x !== "" && Number.isFinite(parseFloat(x)));
+    return v == null ? NaN : parseFloat(v[1]);
   };
+  const rawSample = text => String(text).replace(/\s+/g, " ").trim().slice(0, 400);
+  const withSample = (out, text) => Object.defineProperty(out, "sample", { value: rawSample(text) }); // not counted as a value
+  function* ancestorsUpTo(el, stop) { for (let a = el.parentElement; a && a !== stop; a = a.parentElement) yield a; }
   // { layer: value } from a GetFeatureInfo reply.
   function parseGfi(text, kind, layers) {
     if (/ServiceException/i.test(text)) throw replied(`server error: ${snippet(text)}`);
@@ -1125,22 +1131,41 @@
       try { j = JSON.parse(text); } catch (err) { throw replied(`unreadable JSON reply: ${snippet(text)}`); }
       const f = (j.features || [])[0];
       if (f) out[layers[0]] = firstNumber(f.properties);
-      return out;
+      return withSample(out, JSON.stringify(f ? f.properties : j));
     }
     if (kind === "xml") {
-      for (const el of xmlDoc(text).getElementsByTagName("*")) {
-        if (!/^(value_0|value_list|value)$/.test(el.localName)) continue;
-        let layer = null;
-        for (let a = el.parentElement; a && !layer; a = a.parentElement) {
-          const base = a.localName.replace(/_(layer|feature)$/, "");
-          if (layers.includes(base)) { layer = base; break; }
+      // Features are the elements named <layer>_feature (MapServer GML 2) or the children of featureMember/member
+      // (GML 3). Their attributes are the child elements outside the gml: namespace (which holds geometry and bounds).
+      // Layer names are matched ignoring case and punctuation, from the element names or a gml:name.
+      const doc = xmlDoc(text);
+      const norm = n => String(n).toLowerCase().replace(/[^a-z0-9]/g, "");
+      const byNorm = new Map(layers.map(l => [norm(l), l]));
+      const isGml = el => /^http:\/\/www\.opengis\.net\/gml/.test(el.namespaceURI || "");
+      const layerOf = el => {
+        for (let a = el; a && a.nodeType === 1; a = a.parentElement) {
+          const base = norm(a.localName.replace(/_(layer|feature)$/i, ""));
+          if (byNorm.has(base)) return byNorm.get(base);
           const nm = [...a.children].find(c => c.localName === "name");
-          if (nm && layers.includes(nm.textContent.trim())) layer = nm.textContent.trim();
+          if (nm && byNorm.has(norm(nm.textContent))) return byNorm.get(norm(nm.textContent));
         }
-        if (!layer && layers.length === 1) layer = layers[0];
-        if (layer && !(layer in out)) out[layer] = parseFloat(el.textContent);
+        return layers.length === 1 ? layers[0] : null;
+      };
+      const feats = [...doc.getElementsByTagName("*")].filter(e =>
+        /_feature$/i.test(e.localName) || /^(featureMember|member)$/.test(e.parentElement ? e.parentElement.localName : ""));
+      for (const f of feats) {
+        const layer = layerOf(f);
+        if (!layer || layer in out) continue;
+        const props = {};
+        for (const leaf of f.getElementsByTagName("*")) {
+          if (leaf.children.length || isGml(leaf) || [...ancestorsUpTo(leaf, f)].some(isGml)) continue;
+          if (!(leaf.localName in props)) props[leaf.localName] = leaf.textContent.trim();
+        }
+        const v = firstNumber(props);
+        if (Number.isFinite(v)) out[layer] = v;
       }
-      return out;
+      // Sample for the console: the first feature (or layer) as sent, which shows how the server names its values.
+      const first = feats[0] || [...doc.getElementsByTagName("*")].find(e => /_layer$/i.test(e.localName)) || doc.documentElement;
+      return withSample(out, new XMLSerializer().serializeToString(first).replace(/ xmlns(:\w+)?="[^"]*"/g, ""));
     }
     if (!/GetFeatureInfo results/i.test(text)) throw replied(`unexpected reply: ${snippet(text)}`);
     let layer = null;
@@ -1228,10 +1253,13 @@
       for (const fmt of plan.fmts) {
         try {
           const v = await gfiValues(name, layers, fmt, lat, lon);
-          if (hasValues(v)) { soilFmtConfirmed = soilFmtConfirmed || fmt.fmt; plan.used.add(fmt.fmt); return v; }
+          if (hasValues(v)) {
+            if (!soilFmtConfirmed) slog(`values read from ${fmt.fmt}, e.g. ${name}: ${v.sample || "(no sample)"}`);
+            soilFmtConfirmed = soilFmtConfirmed || fmt.fmt; plan.used.add(fmt.fmt); return v;
+          }
           empty = empty || v;
           if (soilFmtConfirmed === fmt.fmt) break; // this format is known to work: empty really means no data here
-          slog(`${name}: no values in ${fmt.fmt} reply; trying the next format`);
+          slog(`${name}: no values in ${fmt.fmt} reply; trying the next format. Reply: ${v.sample || "(empty)"}`);
         } catch (err) { slog(`${name}: GetFeatureInfo in ${fmt.fmt} failed (${err.message})`); }
       }
       if (empty) return empty;
