@@ -1028,42 +1028,115 @@
     $("soilTypeMsg").textContent = typeMsg; $("soilTypeMsg").hidden = !typeMsg;
   }
 
-  // Soil data for the chosen point comes from ISRIC SoilGrids' map server (maps.isric.org, which also draws the soil
-  // overlay), by asking each map for its value at that point (WMS GetFeatureInfo). ISRIC's REST API (rest.isric.org)
-  // is paused and limited to 5 requests a minute, so it is only tried if the map server fails. Every request gives up
-  // after SOIL_TIMEOUT, so the panel never sits on "Loading…".
-  const SOIL_TIMEOUT = 12000;
+  // ---------- Soil values at a point ----------
+  // ISRIC's REST API (rest.isric.org) is paused and limited to 5 requests a minute, so values come from the SoilGrids
+  // map server (maps.isric.org), which also draws the soil overlay. The app first reads the server's own description
+  // (GetCapabilities: layer names and the reply formats it offers), then for each map asks either:
+  //   1. GetFeatureInfo, "what is the value here?", in a format the server offers (JSON, GML/XML or plain text), or
+  //   2. if it can't answer that, a 3×3-pixel GetMap image drawn with a custom style in which every value has its own
+  //      colour (the same kind of request as the overlay), and reads the value back from the middle pixel.
+  // The REST API is the last resort. Every request has a time limit, and each step is written to the browser console
+  // ("Terroir Map soil: …") so problems can be diagnosed on the live site.
+  const SOIL_SERVER = "https://maps.isric.org/mapserv";
+  const SOIL_TIMEOUT = 10000;
   const SOIL_DEPTHS = { "0-5cm": 5, "5-15cm": 10, "15-30cm": 15 }; // cm thickness, for the 0–30 cm average
   // The maps store whole numbers; divide by these to get the units shown (as in the SoilGrids documentation).
-  const SOIL_UNITS = { phh2o: [10, ""], soc: [10, "g/kg"], clay: [10, "%"], sand: [10, "%"], silt: [10, "%"], nitrogen: [100, "g/kg"], cec: [10, "cmol₍c₎/kg"] };
+  // max/step: the value range covered by the colour-coded image fallback (see codeSld).
+  const SOIL_UNITS = {
+    phh2o: { div: 10, unit: "", max: 140, step: 4 }, soc: { div: 10, unit: "g/kg", max: 4095, step: 64 },
+    clay: { div: 10, unit: "%", max: 1000, step: 16 }, sand: { div: 10, unit: "%", max: 1000, step: 16 },
+    silt: { div: 10, unit: "%", max: 1000, step: 16 }, nitrogen: { div: 100, unit: "g/kg", max: 4095, step: 64 },
+    cec: { div: 10, unit: "cmol₍c₎/kg", max: 1023, step: 16 },
+  };
+  let soilLog = [];
+  const slog = msg => soilLog.push(msg);
+  const replied = msg => Object.assign(new Error(msg), { replied: true }); // the server answered, but not usefully
   const soilCache = new Map();
-  function fetchSoilText(url) {
-    if (soilCache.has(url)) return soilCache.get(url);
-    const ctrl = new AbortController(), timer = setTimeout(() => ctrl.abort(), SOIL_TIMEOUT);
+  function soilFetch(url, as = "text", ms = SOIL_TIMEOUT) {
+    const key = as + " " + url;
+    if (soilCache.has(key)) return soilCache.get(key);
+    const ctrl = new AbortController(), timer = setTimeout(() => ctrl.abort(), ms);
     const p = fetch(url, { signal: ctrl.signal })
-      .then(r => { if (!r.ok) throw new Error(`${r.status} ${r.statusText}`); return r.text(); })
+      .then(r => { if (!r.ok) throw replied(`HTTP ${r.status}`); return as === "blob" ? r.blob() : r.text(); })
+      .catch(err => {
+        throw err.name === "AbortError" ? Object.assign(new Error(`no answer within ${ms / 1000} s`), { timeout: true })
+          : err.replied ? err : new Error(`request blocked or failed (${err.message})`);
+      })
       .finally(() => clearTimeout(timer));
-    soilCache.set(url, p);
-    p.catch(() => soilCache.delete(url));
+    soilCache.set(key, p);
+    p.catch(() => soilCache.delete(key));
     return p;
   }
-  // Reads { layer: value } from a GetFeatureInfo reply in either of MapServer's built-in formats (GML or plain text).
-  // Throws if the reply is neither, so the caller can try the other format.
-  function parseFeatureInfo(text) {
+  const mapUrl = (name, params) => `${SOIL_SERVER}?map=/map/${name}.map&SERVICE=WMS&VERSION=1.3.0&${params}`;
+  const xmlDoc = text => {
+    const doc = new DOMParser().parseFromString(text, "application/xml");
+    if (doc.getElementsByTagName("parsererror").length) throw replied("unreadable XML reply");
+    return doc;
+  };
+  const snippet = text => String(text).replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 140);
+
+  // The server's description of one map: GetFeatureInfo formats and layers (with whether each can be queried).
+  const capsCache = new Map();
+  function soilCaps(name) {
+    if (!capsCache.has(name)) {
+      const p = soilFetch(mapUrl(name, "REQUEST=GetCapabilities"), "text", 8000).then(text => {
+        if (/ServiceException/i.test(text)) throw replied(`capabilities error: ${snippet(text)}`);
+        const all = [...xmlDoc(text).getElementsByTagName("*")];
+        const gfi = all.find(e => e.localName === "GetFeatureInfo");
+        const formats = gfi ? [...gfi.children].filter(e => e.localName === "Format").map(e => e.textContent.trim()) : [];
+        const layers = new Map();
+        for (const L of all.filter(e => e.localName === "Layer")) {
+          const n = [...L.children].find(c => c.localName === "Name");
+          if (n) layers.set(n.textContent.trim(), L.getAttribute("queryable") === "1");
+        }
+        return { formats, layers };
+      });
+      p.catch(() => capsCache.delete(name));
+      capsCache.set(name, p);
+    }
+    return capsCache.get(name);
+  }
+  const GFI_FORMATS = [["application/json", "json"], ["application/geo+json", "json"], ["geojson", "json"],
+    ["application/vnd.ogc.gml", "xml"], ["text/xml", "xml"], ["application/xml", "xml"], ["text/plain", "text"]];
+  function pickFormat(offered) {
+    for (const [f, kind] of GFI_FORMATS) {
+      const m = offered.find(o => o.toLowerCase().startsWith(f));
+      if (m) return { fmt: m, kind };
+    }
+    return null;
+  }
+  const firstNumber = props => {
+    for (const k of ["value_0", "value_list", "value", "pixel", "GRAY_INDEX", "band_1"]) if (props && props[k] != null && props[k] !== "") return parseFloat(props[k]);
+    const v = props && Object.values(props).find(x => x !== "" && Number.isFinite(parseFloat(x)));
+    return v == null ? NaN : parseFloat(v);
+  };
+  // { layer: value } from a GetFeatureInfo reply.
+  function parseGfi(text, kind, layers) {
+    if (/ServiceException/i.test(text)) throw replied(`server error: ${snippet(text)}`);
     const out = {};
-    if (/ServiceException/i.test(text)) throw new Error("map server error");
-    if (/^\s*</.test(text)) {
-      const doc = new DOMParser().parseFromString(text, "application/xml");
-      const root = doc.documentElement;
-      if (!root || root.getElementsByTagName("parsererror").length || !/msGMLOutput|FeatureCollection|FeatureInfo/i.test(root.localName)) throw new Error("unrecognised reply");
-      for (const el of root.getElementsByTagName("*")) {
-        if (!el.localName.endsWith("_layer")) continue;
-        const v = [...el.getElementsByTagName("*")].find(c => c.localName === "value_0" || c.localName === "value_list");
-        if (v) out[el.localName.slice(0, -"_layer".length)] = parseFloat(v.textContent);
+    if (kind === "json") { // one layer per request in this format
+      let j;
+      try { j = JSON.parse(text); } catch (err) { throw replied(`unreadable JSON reply: ${snippet(text)}`); }
+      const f = (j.features || [])[0];
+      if (f) out[layers[0]] = firstNumber(f.properties);
+      return out;
+    }
+    if (kind === "xml") {
+      for (const el of xmlDoc(text).getElementsByTagName("*")) {
+        if (!/^(value_0|value_list|value)$/.test(el.localName)) continue;
+        let layer = null;
+        for (let a = el.parentElement; a && !layer; a = a.parentElement) {
+          const base = a.localName.replace(/_(layer|feature)$/, "");
+          if (layers.includes(base)) { layer = base; break; }
+          const nm = [...a.children].find(c => c.localName === "name");
+          if (nm && layers.includes(nm.textContent.trim())) layer = nm.textContent.trim();
+        }
+        if (!layer && layers.length === 1) layer = layers[0];
+        if (layer && !(layer in out)) out[layer] = parseFloat(el.textContent);
       }
       return out;
     }
-    if (!/GetFeatureInfo results/i.test(text)) throw new Error("unrecognised reply");
+    if (!/GetFeatureInfo results/i.test(text)) throw replied(`unexpected reply: ${snippet(text)}`);
     let layer = null;
     for (const line of text.split(/\r?\n/)) {
       const m = line.match(/^\s*Layer '([^']+)'/);
@@ -1073,58 +1146,125 @@
     }
     return out;
   }
-  // The value of each of `layers` in map `<name>.map` at the point. Uses the same EPSG:3857 grid as the overlay,
-  // asking for the middle pixel of a 3×3 image 120 m across (SoilGrids cells are 250 m).
-  async function soilPoint(name, layers, lat, lon) {
+  // A 3×3-pixel image 120 m across centred on the point, in the overlay's EPSG:3857 grid (SoilGrids cells are 250 m).
+  function pointBox(lat, lon) {
     const R = 6378137, x = R * lon * Math.PI / 180, y = R * Math.log(Math.tan(Math.PI / 4 + lat * Math.PI / 360)), d = 60;
-    const L = layers.join(",");
-    const url = fmt => `https://maps.isric.org/mapserv?map=/map/${name}.map&SERVICE=WMS&VERSION=1.3.0&REQUEST=GetFeatureInfo`
-      + `&LAYERS=${L}&QUERY_LAYERS=${L}&STYLES=&CRS=EPSG:3857&BBOX=${(x - d).toFixed(1)},${(y - d).toFixed(1)},${(x + d).toFixed(1)},${(y + d).toFixed(1)}`
-      + `&WIDTH=3&HEIGHT=3&I=1&J=1&FEATURE_COUNT=1&INFO_FORMAT=${encodeURIComponent(fmt)}`;
-    const text = await fetchSoilText(url("application/vnd.ogc.gml")); // no answer or timed out: give up (no second wait)
-    try { return parseFeatureInfo(text); }
-    catch (err) {
-      const plain = await fetchSoilText(url("text/plain"));
-      try { return parseFeatureInfo(plain); }
-      catch (err2) { err2.replied = true; throw err2; } // the server answered, but with an error or an unknown format
+    return `CRS=EPSG:3857&BBOX=${(x - d).toFixed(1)},${(y - d).toFixed(1)},${(x + d).toFixed(1)},${(y + d).toFixed(1)}&WIDTH=3&HEIGHT=3`;
+  }
+  async function gfiValues(name, layers, fmt, lat, lon) {
+    const ask = list => soilFetch(mapUrl(name, `REQUEST=GetFeatureInfo&LAYERS=${list}&QUERY_LAYERS=${list}&STYLES=&${pointBox(lat, lon)}`
+      + `&I=1&J=1&FEATURE_COUNT=1&INFO_FORMAT=${encodeURIComponent(fmt.fmt)}`)).then(t => parseGfi(t, fmt.kind, list.split(",")));
+    if (fmt.kind !== "json") return ask(layers.join(","));
+    return Object.assign({}, ...(await Promise.all(layers.map(ask))));
+  }
+  // Colour code for the image fallback: value v is drawn as red = v ÷ 256, green = v mod 256. Style entries every
+  // `step` (and at the end of each block of 256) let the server's colour ramp hit every whole number exactly; values
+  // outside 0…max (including "no data") come out transparent.
+  function codeSld(layer, max, step) {
+    const hex = v => "#" + [v >> 8, v & 255, 0].map(c => c.toString(16).padStart(2, "0")).join("");
+    const qs = new Set([max]);
+    for (let v = 0; v <= max; v += step) qs.add(v);
+    for (let v = 255; v <= max; v += 256) qs.add(v);
+    const entries = [...qs].sort((a, b) => a - b).map(v => `<ColorMapEntry color="${hex(v)}" quantity="${v}"/>`).join("");
+    return '<StyledLayerDescriptor version="1.0.0" xmlns="http://www.opengis.net/sld" xmlns:ogc="http://www.opengis.net/ogc">'
+      + `<NamedLayer><Name>${layer}</Name><UserStyle><FeatureTypeStyle><Rule><RasterSymbolizer><ColorMap>${entries}`
+      + "</ColorMap></RasterSymbolizer></Rule></FeatureTypeStyle></UserStyle></NamedLayer></StyledLayerDescriptor>";
+  }
+  async function imageValue(name, layer, max, step, lat, lon) {
+    const blob = await soilFetch(mapUrl(name, `REQUEST=GetMap&LAYERS=${layer}&STYLES=&${pointBox(lat, lon)}`
+      + `&FORMAT=image/png&TRANSPARENT=TRUE&SLD_BODY=${encodeURIComponent(codeSld(layer, max, step))}`), "blob");
+    if (!/^image\//.test(blob.type)) throw replied(`not an image: ${snippet(await blob.text())}`);
+    const bmp = await createImageBitmap(blob, { premultiplyAlpha: "none", colorSpaceConversion: "none" });
+    const canvas = document.createElement("canvas");
+    canvas.width = bmp.width; canvas.height = bmp.height;
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    ctx.drawImage(bmp, 0, 0);
+    const [r, g, , a] = ctx.getImageData(Math.floor(bmp.width / 2), Math.floor(bmp.height / 2), 1, 1).data;
+    return a < 128 ? NaN : r * 256 + g;
+  }
+  async function imageValues(name, layers, rangeOf, lat, lon) {
+    const vals = await Promise.allSettled(layers.map(l => imageValue(name, l, rangeOf(l).max, rangeOf(l).step, lat, lon)));
+    const bad = vals.find(v => v.status === "rejected");
+    if (vals.every(v => v.status === "rejected")) throw bad.reason;
+    if (bad) slog(`${name}: some images failed (${bad.reason.message})`);
+    return Object.fromEntries(layers.map((l, i) => [l, vals[i].status === "fulfilled" ? vals[i].value : NaN]));
+  }
+  // How to ask the server, worked out from its description; null if it can't be reached at all.
+  async function soilPlan() {
+    const [pc, wc] = await Promise.allSettled([soilCaps("phh2o"), soilCaps("wrb")]);
+    if (pc.status === "rejected" && wc.status === "rejected") {
+      slog(`map server description unavailable: ${pc.reason.message}`);
+      // No answer in time: the server is out of reach. Otherwise (an odd reply, or only this request blocked) still try,
+      // guessing GML replies and the usual layer names; failures there fall through to the colour-coded images.
+      if (pc.reason.timeout && wc.reason.timeout) return null;
+      return { fmt: { fmt: "application/vnd.ogc.gml", kind: "xml" }, wrbLayers: null, propsQueryable: true, wrbQueryable: true };
     }
+    const caps = pc.status === "fulfilled" ? pc.value : wc.value;
+    const fmt = pickFormat(caps.formats);
+    const wrb = wc.status === "fulfilled" ? wc.value : null;
+    const plan = {
+      fmt,
+      propsQueryable: pc.status === "fulfilled" ? [...pc.value.layers.values()].some(Boolean) : true,
+      wrbQueryable: wrb ? [...wrb.layers.values()].some(Boolean) : true,
+      // probability layers: the WRB group names the server lists (falls back to the known list)
+      wrbLayers: wrb ? [...wrb.layers.keys()].filter(n => n !== "MostProbable" && soilInfo(n)) : null,
+    };
+    slog(`map server: GetFeatureInfo formats ${caps.formats.join(", ") || "none"}; using ${fmt ? fmt.fmt : "images"}`);
+    return plan;
+  }
+  // Values of `layers` in one map: GetFeatureInfo if possible, otherwise colour-coded images.
+  async function mapValues(name, layers, rangeOf, plan, queryable, lat, lon) {
+    if (plan.fmt && queryable) {
+      try { return await gfiValues(name, layers, plan.fmt, lat, lon); }
+      catch (err) { slog(`${name}: GetFeatureInfo failed (${err.message}); trying images`); }
+    }
+    if (soilFallback) throw new Error("the map server doesn't accept custom styles"); // seen by the overlay
+    return imageValues(name, layers, rangeOf, lat, lon);
   }
   // Result shape shared by both sources: props = [{ name, value, unit }] (empty when the point has no soil data),
-  // types = [[group, percent or null]] (null percent: only the most likely group is known).
+  // types = [[group, percent or null]] (null percent: only the most likely group is known); null = unavailable.
   async function soilFromMapServer(lat, lon) {
+    const plan = await soilPlan();
+    if (!plan) return { props: null, types: null };
     const names = Object.keys(SOIL_PROPS);
-    const typesP = soilTypesFromMapServer(lat, lon); // in parallel with the properties
-    const propReplies = await Promise.allSettled(names.map(n => soilPoint(n, Object.keys(SOIL_DEPTHS).map(dp => `${n}_${dp}_mean`), lat, lon)));
+    const typesP = soilTypesFromMapServer(plan, lat, lon);
+    const replies = await Promise.allSettled(names.map(n =>
+      mapValues(n, Object.keys(SOIL_DEPTHS).map(dp => `${n}_${dp}_mean`), () => SOIL_UNITS[n], plan, plan.propsQueryable, lat, lon)));
     let props = null;
-    if (propReplies.some(r => r.status === "fulfilled")) {
+    const failed = replies.find(r => r.status === "rejected");
+    if (failed) slog(`soil properties: ${failed.reason.message}`);
+    if (replies.some(r => r.status === "fulfilled")) {
       props = [];
       names.forEach((n, i) => {
-        if (propReplies[i].status !== "fulfilled") return;
+        if (replies[i].status !== "fulfilled") return;
         let sum = 0, w = 0;
         for (const [dp, t] of Object.entries(SOIL_DEPTHS)) {
-          const v = propReplies[i].value[`${n}_${dp}_mean`];
-          if (v == null || !Number.isFinite(v) || v < 0) continue; // −32768 = no data
+          const v = replies[i].value[`${n}_${dp}_mean`];
+          if (v == null || !Number.isFinite(v) || v < 0) continue; // −32768 or transparent = no data
           sum += v * t; w += t;
         }
-        if (w) props.push({ name: n, value: sum / w / SOIL_UNITS[n][0], unit: SOIL_UNITS[n][1] });
+        if (w) props.push({ name: n, value: sum / w / SOIL_UNITS[n].div, unit: SOIL_UNITS[n].unit });
       });
     }
     return { props, types: await typesP };
   }
   // Soil group probabilities (top 5), or just the most likely group if the probability layers can't be read.
-  async function soilTypesFromMapServer(lat, lon) {
+  async function soilTypesFromMapServer(plan, lat, lon) {
+    const groups = plan.wrbLayers && plan.wrbLayers.length ? plan.wrbLayers : SOIL_CODES;
+    const range = l => (l === "MostProbable" ? { max: 29, step: 1 } : { max: 100, step: 4 });
     try {
-      const v = await soilPoint("wrb", ["MostProbable", ...SOIL_CODES], lat, lon);
-      const types = SOIL_CODES.map(g => [g, v[g]]).filter(([, p]) => Number.isFinite(p) && p > 0 && p <= 100)
+      const v = await mapValues("wrb", ["MostProbable", ...groups], range, plan, plan.wrbQueryable, lat, lon);
+      const types = groups.map(g => [g, v[g]]).filter(([, p]) => Number.isFinite(p) && p > 0 && p <= 100)
         .sort((a, b) => b[1] - a[1]).slice(0, 5);
       const top = SOIL_CODES[v.MostProbable];
       return types.length ? types : top ? [[top, null]] : [];
     } catch (err) {
-      if (!err.replied) return null; // no answer: don't wait again
+      slog(`soil groups: ${err.message}`);
+      if (!err.replied) return null;
       try { // answered with an error (e.g. a layer name it doesn't know): ask for the most likely group alone
-        const top = SOIL_CODES[(await soilPoint("wrb", ["MostProbable"], lat, lon)).MostProbable];
+        const top = SOIL_CODES[(await mapValues("wrb", ["MostProbable"], range, plan, plan.wrbQueryable, lat, lon)).MostProbable];
         return top ? [[top, null]] : [];
-      } catch (err2) { return null; }
+      } catch (err2) { slog(`most likely soil group: ${err2.message}`); return null; }
     }
   }
   async function soilFromRest(lat, lon, needProps, needTypes) {
@@ -1134,8 +1274,8 @@
       + Object.keys(SOIL_DEPTHS).map(dp => `&depth=${dp}`).join("") + "&value=mean";
     const classUrl = `${base}/classification/query?${ll}&number_classes=5`;
     const [pr, cr] = await Promise.allSettled([
-      needProps ? fetchSoilText(propUrl).then(JSON.parse) : Promise.reject(new Error("not needed")),
-      needTypes ? fetchSoilText(classUrl).then(JSON.parse) : Promise.reject(new Error("not needed")),
+      needProps ? soilFetch(propUrl, "text", 8000).then(JSON.parse) : Promise.reject(new Error("not needed")),
+      needTypes ? soilFetch(classUrl, "text", 8000).then(JSON.parse) : Promise.reject(new Error("not needed")),
     ]);
     let props = null, types = null;
     if (pr.status === "fulfilled") {
@@ -1148,7 +1288,7 @@
           sum += v * SOIL_DEPTHS[dp.label]; w += SOIL_DEPTHS[dp.label];
         }
         const u = layer.unit_measure || {};
-        if (w) props.push({ name: layer.name, value: sum / w / (u.d_factor || 1), unit: SOIL_UNITS[layer.name]?.[1] ?? (u.target_units || "") });
+        if (w) props.push({ name: layer.name, value: sum / w / (u.d_factor || 1), unit: SOIL_UNITS[layer.name]?.unit ?? (u.target_units || "") });
       }
     }
     if (cr.status === "fulfilled") types = (cr.value.wrb_class_probability || []).filter(p => p[1] > 0);
@@ -1161,14 +1301,23 @@
     setSoil("Loading…", "Loading…"); setLoading("soil", true);
     $("soilProps").hidden = true; $("soilTypes").innerHTML = "";
 
+    soilLog = [];
     let { props, types } = await soilFromMapServer(lat, lon);
     if (token !== soilToken) return;
+    const fromMap = { props: props != null, types: types != null };
     if (props == null || types == null) { // map server failed for one or both: last resort, the REST API
       const rest = await soilFromRest(lat, lon, props == null, types == null);
       if (token !== soilToken) return;
+      if (props == null) slog(`REST API properties: ${rest.props == null ? "unavailable" : "ok"}`);
+      if (types == null) slog(`REST API soil groups: ${rest.types == null ? "unavailable" : "ok"}`);
       props = props ?? rest.props; types = types ?? rest.types;
     }
     setLoading("soil", false);
+    // Diagnosis for the browser console: what was tried and what worked.
+    const ok = props != null && types != null;
+    console[ok ? "info" : "warn"](`Terroir Map soil (${lat}, ${lon}): properties ${props == null ? "unavailable" : fromMap.props ? "from map server" : "from REST API"}, `
+      + `soil groups ${types == null ? "unavailable" : fromMap.types ? "from map server" : "from REST API"}`
+      + (soilLog.length ? "\n  " + soilLog.join("\n  ") : ""));
 
     // Topsoil properties, depth-weighted over 0–30 cm
     let msg = "";
