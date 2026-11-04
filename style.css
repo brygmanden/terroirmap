@@ -401,7 +401,7 @@ select.control { padding-inline: 8px; }
 
 .credits { font-size: 11px; color: var(--color-neutral-700); padding-top: 8px; }
 
-/* — glossary tooltips (text in glossary.js; shown after hovering a term for 1.5 s) — */
+/* — glossary tips (text in glossary.js; shown after hovering a term for 1.5 s, or straight away when tapped) — */
 [data-tip]:not(button) { cursor: help; }
 .term {
   text-decoration: underline dotted color-mix(in srgb, currentColor 45%, transparent);
@@ -420,6 +420,7 @@ select.control { padding-inline: 8px; }
   color: color-mix(in srgb, var(--color-bg) 65%, transparent);
 }
 .tip-p { margin: 0; }
+.tip.tapped { pointer-events: auto; } /* opened by a tap: a tap on the tip closes it rather than reaching what is underneath */
 
 /* — wide: fixed-height app, map fills, panel scrolls — */
 @media (min-width: 960px) {

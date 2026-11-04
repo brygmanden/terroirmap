@@ -1081,9 +1081,10 @@
     setSoil(msg, typeMsg);
   }
 
-  // ---------- Tooltips ----------
+  // ---------- Glossary tips ----------
   // Hovering a term (any [data-tip] element) for 1.5 s shows its plain-language explanation from glossary.js.
   // Keyboard focus on a [data-tip] element works the same way; Escape closes.
+  // Touch screens can't hover, so there a tap on a term shows its tip straight away (see below).
   const TIP_DELAY = 1500;
   const tip = $("tip");
   let tipTimer = null, tipTarget = null;
@@ -1093,6 +1094,7 @@
     if (tipTarget) tipTarget.removeAttribute("aria-describedby");
     tipTarget = null;
     tip.hidden = true;
+    tip.classList.remove("tapped");
   }
   function showTip(el) {
     const g = window.GLOSSARY.get(el.dataset.tip);
@@ -1126,10 +1128,36 @@
   document.addEventListener("pointerout", e => {
     if (tipTarget && !(e.relatedTarget && tipTarget.contains(e.relatedTarget))) hideTip();
   });
-  document.addEventListener("focusin", e => armTip(e.target.closest("[data-tip]")));
+  // Touch: tapping a term opens its tip at once; tapping it again, the tip, or anywhere else closes it. Terms that
+  // already do something when tapped (buttons such as the weather variables and "Soil types", soil type links,
+  // form fields) keep doing just that, with no tip. Tapping a field's label shows the tip instead of opening the field.
+  const TAP_ACTIONS = "a, button, input, select, textarea, [data-soil], [role=button], [role=radio]";
+  let lastPointer = "mouse", openAtPress = null, pressOnTip = false;
+  document.addEventListener("pointerdown", e => {
+    lastPointer = e.pointerType; openAtPress = tip.hidden ? null : tipTarget; pressOnTip = tip.contains(e.target);
+  }, true);
+  // A tap on an open tip just closes it. Browsers can send that tap's click to a nearby element underneath
+  // ("touch adjustment"), so the click is stopped here before anything else sees it.
+  document.addEventListener("click", e => {
+    if (!pressOnTip) return;
+    pressOnTip = false; e.stopPropagation(); e.preventDefault(); hideTip();
+  }, true);
+  document.addEventListener("click", e => {
+    if (lastPointer !== "touch") return;
+    const el = e.target.closest("[data-tip]");
+    if (!el || el.closest(TAP_ACTIONS) || el.querySelector(TAP_ACTIONS) || !window.GLOSSARY.get(el.dataset.tip || "")) return;
+    if (e.target.closest("label")) e.preventDefault(); // keep the label from opening its field
+    if (openAtPress === el) return; // second tap on the same term: it was closed on press
+    hideTip();
+    tipTarget = el;
+    tip.classList.add("tapped"); // the open tip catches the next tap (which closes it) instead of passing it through
+    showTip(el);
+  });
+  // Focus from a tap (e.g. on a button) shouldn't open a tip; keyboard focus still does.
+  document.addEventListener("focusin", e => { if (lastPointer !== "touch") armTip(e.target.closest("[data-tip]")); });
   document.addEventListener("focusout", hideTip);
   document.addEventListener("keydown", e => { if (e.key === "Escape") hideTip(); });
-  document.addEventListener("pointerdown", hideTip);
+  document.addEventListener("pointerdown", e => { if (!tip.contains(e.target)) hideTip(); });
   document.addEventListener("scroll", hideTip, true);
 
   // ---------- Soil type details popup ----------
