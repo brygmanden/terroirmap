@@ -24,6 +24,13 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+      # Cache-busting: add the commit ID to the page's own scripts and stylesheet (e.g. app.js?v=228da5f), so browsers
+      # fetch the new files right after each deploy instead of a cached copy. Only the published copy changes.
+      - name: Version script and stylesheet links
+        run: |
+          V="${GITHUB_SHA::7}"
+          sed -E -i "s#(src|href)=\"([a-z]+\.(js|css))\"#\1=\"\2?v=$V\"#g" index.html
+          grep -E "\?v=$V" index.html
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
