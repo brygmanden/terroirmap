@@ -568,14 +568,26 @@
   });
   map.on("mouseleave", "farms", () => { map.getCanvas().style.cursor = ""; $("regionCard").hidden = true; });
 
+  // Clicking an entry zooms to it: a region dot to the region's outline, a farm, mill or auction to close enough for
+  // its name label (zoom 12, or closer if already zoomed in). Anywhere else just selects that spot.
+  const FARM_ZOOM = 12;
   map.on("click", e => {
     const hit = map.queryRenderedFeatures(e.point, { layers: ["regions"] })[0];
     if (hit) {
       const r = byId.get(hit.properties.id);
-      selectPoint(r.lat, r.lon, { region: r.id });
-    } else {
-      selectPoint(e.lngLat.lat, e.lngLat.lng);
+      selectPoint(r.lat, r.lon, { region: r.id, fly: true });
+      return;
     }
+    // Farm dots are small (especially on touch screens), so accept clicks within a few pixels; nearest dot wins.
+    const pad = 6, near = map.queryRenderedFeatures([[e.point.x - pad, e.point.y - pad], [e.point.x + pad, e.point.y + pad]], { layers: ["farms"] });
+    if (near.length) {
+      const dist = f => { const q = map.project(f.geometry.coordinates); return (q.x - e.point.x) ** 2 + (q.y - e.point.y) ** 2; };
+      const f = near.reduce((a, b) => (dist(b) < dist(a) ? b : a));
+      const [lon, lat] = f.geometry.coordinates;
+      selectPoint(lat, lon, { fly: true, zoom: FARM_ZOOM });
+      return;
+    }
+    selectPoint(e.lngLat.lat, e.lngLat.lng);
   });
 
   // ---------- Selecting a point ----------
@@ -590,7 +602,7 @@
     const src = map.getSource("picked");
     if (src) src.setData(pointGeo(state.lat, state.lon));
     showRegion(state.regionId, opts.fly);
-    if (opts.fly && !state.regionId) map.flyTo({ center: [state.lon, state.lat], zoom: Math.max(map.getZoom(), 8), pitch: 55, essential: true });
+    if (opts.fly && !state.regionId) map.flyTo({ center: [state.lon, state.lat], zoom: Math.max(map.getZoom(), opts.zoom || 8), pitch: 55, essential: true });
     loadAll();
   }
 
