@@ -1,0 +1,514 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>Add to Terroir Map</title>
+<link rel="icon" href="../assets/icons/favicon.ico" sizes="48x48">
+<link rel="icon" type="image/png" href="../assets/icons/favicon-32.png" sizes="32x32">
+<link rel="apple-touch-icon" href="../assets/icons/apple-touch-icon.png">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+<style>
+/* Same fonts and colours as the map (style.css). */
+@font-face { font-family: "Head"; font-weight: 700; font-display: swap; src: url("../assets/fonts/bh/Head-Bold.woff2") format("woff2"); }
+@font-face { font-family: "NoBH"; font-weight: 400; font-display: swap; src: url("../assets/fonts/bh/NoBH-Regular.woff2") format("woff2"); }
+@font-face { font-family: "NoBH"; font-weight: 700; font-display: swap; src: url("../assets/fonts/bh/NoBH-Bold.woff2") format("woff2"); }
+:root {
+  --color-bg: #f3f2f2; --color-text: #201e1d; --color-accent: #c4274d; --color-accent-700: #921838; --color-accent-100: #fdf0f3;
+  --color-field: #f9f9f9; --color-neutral-300: #d7d3d3; --color-neutral-700: #605d5d; --color-ok: #2f7d4a; --color-ok-100: #edf7f0;
+  --color-warn: #8a5a00; --color-warn-100: #fdf6e7; --radius: 8px;
+  --font-body: "NoBH", system-ui, sans-serif; --font-heading: "Head", "NoBH", system-ui, sans-serif;
+}
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+body { margin: 0; background: var(--color-bg); color: var(--color-text); font: 400 15px/1.5 var(--font-body); }
+a { color: var(--color-accent-700); text-underline-offset: 3px; }
+:focus { outline: none; } :focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+[hidden] { display: none !important; }
+main {
+  max-width: 760px; margin: 0 auto;
+  padding: 28px max(16px, env(safe-area-inset-right)) calc(48px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+}
+h1 { font: 700 30px/1.1 var(--font-heading); margin: 0 0 8px; letter-spacing: -.01em; }
+h2 { font: 700 18px/1.2 var(--font-heading); margin: 0 0 4px; }
+.lead { margin: 0 0 24px; color: var(--color-neutral-700); max-width: 60ch; }
+.back { display: inline-block; margin-bottom: 18px; font-size: 14px; }
+.card { background: #fff; border-radius: 12px; padding: 20px; margin-bottom: 16px; display: grid; gap: 18px; }
+.field { display: grid; gap: 6px; }
+.label { font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.req { color: var(--color-accent); }
+.help { margin: 0; font-size: 13px; color: var(--color-neutral-700); }
+.control {
+  width: 100%; min-height: 44px; padding: 8px 12px; font: inherit; font-size: 16px; color: var(--color-text);
+  background: var(--color-field); border: 1px solid var(--color-neutral-300); border-radius: var(--radius);
+}
+.control:focus { border-color: var(--color-accent); }
+.control[aria-invalid="true"] { border-color: var(--color-accent); background: var(--color-accent-100); }
+select.control { appearance: none; -webkit-appearance: none; padding-right: 36px;
+  background: var(--color-field) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M2 4l4 4 4-4' fill='none' stroke='%23201e1d' stroke-width='1.8'/%3E%3C/svg%3E") no-repeat right 12px center; }
+.grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.err { margin: 0; font-size: 13px; color: var(--color-accent-700); font-weight: 700; }
+.map { height: 340px; border-radius: var(--radius); overflow: hidden; background: #1d1c1b; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.btn {
+  min-height: 44px; padding: 8px 18px; border: 0; border-radius: var(--radius); cursor: pointer;
+  font: 700 15px var(--font-body); background: var(--color-text); color: #fff; -webkit-tap-highlight-color: transparent;
+}
+.btn:hover { background: #000; }
+.btn-primary { background: var(--color-accent); } .btn-primary:hover { background: var(--color-accent-700); }
+.btn-quiet { background: var(--color-field); color: var(--color-text); border: 1px solid var(--color-neutral-300); }
+.btn-quiet:hover { background: #eee; }
+.btn-small { min-height: 34px; padding: 4px 12px; font-size: 13px; }
+.btn[disabled] { opacity: .5; cursor: default; }
+.note { border-radius: var(--radius); padding: 10px 12px; font-size: 14px; }
+.note-ok { background: var(--color-ok-100); color: var(--color-ok); }
+.note-warn { background: var(--color-warn-100); color: var(--color-warn); }
+.note-err { background: var(--color-accent-100); color: var(--color-accent-700); }
+.note strong { font-weight: 700; }
+.preview { display: grid; gap: 8px; }
+.preview-card { display: inline-grid; gap: 2px; justify-self: start; padding: 8px 12px; border-radius: 6px; background: rgba(32, 30, 29, .9); color: #f9f9f9; }
+.preview-card b { font-weight: 700; }
+.preview-card span { font-size: 13px; opacity: .85; }
+pre { margin: 0; padding: 10px 12px; border-radius: var(--radius); background: var(--color-field); border: 1px solid var(--color-neutral-300);
+  font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; word-break: break-all; }
+details { font-size: 14px; } summary { cursor: pointer; font-weight: 700; }
+details ol { margin: 8px 0 0; padding-left: 20px; } details li { margin-bottom: 4px; }
+.check { display: flex; gap: 8px; align-items: center; font-size: 14px; }
+.check input { width: 18px; height: 18px; accent-color: var(--color-accent); }
+.dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.25); vertical-align: -1px; margin-right: 4px; }
+.added { margin: 0; padding-left: 20px; font-size: 14px; }
+@media (max-width: 520px) { .grid-2 { grid-template-columns: 1fr; } .card { padding: 16px; } h1 { font-size: 26px; } }
+</style>
+</head>
+<body>
+<main>
+  <a class="back" href="../">← Back to the map</a>
+  <h1>Add to Terroir Map</h1>
+  <p class="lead">Add a coffee farm, mill or auction to the map. Fill in the fields below, check the preview, then press <strong>Add to map</strong>. The live map updates about a minute later.</p>
+
+  <form id="form" novalidate>
+    <section class="card" aria-labelledby="h-what">
+      <h2 id="h-what">What are you adding?</h2>
+      <div class="field">
+        <label class="label" for="type">Type <span class="req">*</span></label>
+        <select id="type" class="control" required>
+          <option value="f">Farm</option>
+          <option value="m">Mill</option>
+          <option value="a">Auction</option>
+        </select>
+        <p class="help" id="typeHelp"></p>
+      </div>
+      <div class="field">
+        <label class="label" for="name">Name <span class="req">*</span></label>
+        <input id="name" class="control" type="text" maxlength="120" autocomplete="off" required aria-describedby="nameHelp nameErr">
+        <p class="help" id="nameHelp"></p>
+        <p class="err" id="nameErr" hidden></p>
+      </div>
+      <div class="field" id="varietiesField">
+        <label class="label" for="varieties">Varieties</label>
+        <input id="varieties" class="control" type="text" maxlength="120" autocomplete="off" placeholder="e.g. Geisha, Caturra, Bourbon" aria-describedby="varietiesHelp">
+        <p class="help" id="varietiesHelp">Optional. Up to three coffee varieties grown on the farm, separated by commas. Shown under the farm's name on the map.</p>
+      </div>
+    </section>
+
+    <section class="card" aria-labelledby="h-where">
+      <h2 id="h-where">Where is it?</h2>
+      <p class="help">Click the map to place it (drag the pin to adjust), type the latitude and longitude, or paste coordinates copied from a map app. Coloured dots are entries already on the map.</p>
+      <div id="map" class="map" role="application" aria-label="Map: click to set the location"></div>
+      <div class="field">
+        <label class="label" for="paste">Paste coordinates</label>
+        <div class="row">
+          <input id="paste" class="control" type="text" autocomplete="off" placeholder="e.g. 8.39903, -82.31577" style="flex: 1 1 220px">
+          <button type="button" id="pasteBtn" class="btn btn-quiet">Use</button>
+        </div>
+        <p class="help">From Google Maps: right-click the spot and click the numbers at the top of the menu to copy them (latitude first, then longitude).</p>
+      </div>
+      <div class="grid-2">
+        <div class="field">
+          <label class="label" for="lat">Latitude <span class="req">*</span></label>
+          <input id="lat" class="control" type="text" inputmode="decimal" autocomplete="off" placeholder="e.g. 8.39903" required aria-describedby="latHelp">
+          <p class="help" id="latHelp">North–south position in decimal degrees, −90 to 90. South of the equator is negative.</p>
+        </div>
+        <div class="field">
+          <label class="label" for="lon">Longitude <span class="req">*</span></label>
+          <input id="lon" class="control" type="text" inputmode="decimal" autocomplete="off" placeholder="e.g. -82.31577" required aria-describedby="lonHelp">
+          <p class="help" id="lonHelp">East–west position in decimal degrees, −180 to 180. West of Greenwich (the Americas) is negative.</p>
+        </div>
+      </div>
+      <p class="err" id="coordErr" hidden></p>
+      <div id="whereNote" class="note" hidden></div>
+      <div class="field">
+        <label class="label" for="prec">How exact is this location? <span class="req">*</span></label>
+        <select id="prec" class="control" required aria-describedby="precHelp">
+          <option value="e">Exact: the place itself</option>
+          <option value="t" selected>Approximate: centre of its town or village</option>
+          <option value="m">Approximate: centre of its municipality or district</option>
+          <option value="s">Approximate: centre of its state or province</option>
+        </select>
+        <p class="help" id="precHelp">Shown when people hover over the dot, so they know how far to trust the position. If you only know the town, pick the town option and use the town's coordinates.</p>
+      </div>
+    </section>
+
+    <section class="card" aria-labelledby="h-check">
+      <h2 id="h-check">Check</h2>
+      <div class="preview">
+        <p class="help">How it will look when someone hovers over the dot:</p>
+        <div class="preview-card" id="previewCard"><b>–</b><span></span></div>
+        <div id="dupNote" class="note note-warn" hidden></div>
+        <details>
+          <summary>Entry as it will be saved</summary>
+          <p class="help" style="margin-top:6px">One line added to <code>data/farms.geojson</code>, the map's list of farms, mills and auctions.</p>
+          <pre id="json" style="margin-top:6px"></pre>
+        </details>
+      </div>
+    </section>
+
+    <section class="card" aria-labelledby="h-save">
+      <h2 id="h-save">Save</h2>
+      <div class="field">
+        <label class="label" for="token">GitHub access token <span class="req">*</span></label>
+        <input id="token" class="control" type="password" autocomplete="off" spellcheck="false" placeholder="github_pat_…" aria-describedby="tokenHelp">
+        <p class="help" id="tokenHelp">Saving writes the entry to the map's repository on GitHub, which needs a token with permission to change it. The token is only sent to GitHub.</p>
+        <label class="check"><input type="checkbox" id="remember"> Remember the token on this device</label>
+        <details>
+          <summary>How to get a token (one-off, about 2 minutes)</summary>
+          <ol>
+            <li>On GitHub, open <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">Settings → Developer settings → Fine-grained tokens → Generate new token</a>.</li>
+            <li>Give it a name (e.g. "Terroir Map data entry") and an expiry date.</li>
+            <li>Under <strong>Repository access</strong>, choose <strong>Only select repositories</strong> and pick <strong>brygmanden/terroirmap</strong>.</li>
+            <li>Under <strong>Permissions → Repository permissions</strong>, set <strong>Contents</strong> to <strong>Read and write</strong>.</li>
+            <li>Generate it, copy it, and paste it above. Treat it like a password: anyone with it can change the repository's files.</li>
+          </ol>
+        </details>
+      </div>
+      <div class="row">
+        <button type="submit" id="submit" class="btn btn-primary">Add to map</button>
+        <button type="button" id="download" class="btn btn-quiet">Download updated file instead</button>
+      </div>
+      <div id="status" class="note" role="status" hidden></div>
+      <div id="addedBox" hidden>
+        <p class="help">Added in this session:</p>
+        <ul class="added" id="addedList"></ul>
+      </div>
+    </section>
+  </form>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script>
+(function () {
+  "use strict";
+  // ---------- Settings ----------
+  const REPO = "brygmanden/terroirmap";            // GitHub repository holding the map
+  const FILE = "data/farms.geojson";                // the map's list of farms, mills and auctions
+  const SITE_FILE = "../" + FILE;                    // the same file as served with this page
+  const COLORS = { f: "#3b9e5d", m: "#e0a526", a: "#4f7be8" }; // as on the map
+  const TYPE_NAME = { f: "Farm", m: "Mill", a: "Auction" };
+  const PREC_TEXT = { e: "exact location", t: "approximate location (town)", m: "approximate location (municipality)", s: "approximate location (state centroid)" };
+  const TYPE_HELP = {
+    f: "A coffee farm (finca, estate, smallholding or farm cooperative's land). Shown as a green dot.",
+    m: "A wet or dry mill, washing station or processing site. Shown as an amber dot.",
+    a: "A coffee auction or exchange with a physical location. Shown as a blue dot.",
+  };
+  const NAME_HELP = {
+    f: "The farm's name as it's commonly known, e.g. \"Finca La Esperanza\". Shown on the map label. No owner names or contact details.",
+    m: "The mill or washing station's name, e.g. \"Kiangoi Factory\". Shown on the map label.",
+    a: "The auction's name, e.g. \"Nairobi Coffee Exchange\". Shown on the map label.",
+  };
+  const TOKEN_KEY = "terroirmap.githubToken";
+  const $ = id => document.getElementById(id);
+
+  // ---------- Existing entries and country borders (for checks and the map) ----------
+  let farms = { type: "FeatureCollection", features: [] };
+  let countries = null;
+  const ready = Promise.all([
+    fetch(SITE_FILE, { cache: "no-cache" }).then(r => r.json()).then(d => { farms = d; }).catch(() => {}),
+    fetch("../data/countries.json").then(r => r.json()).then(d => { countries = d; }).catch(() => {}),
+  ]);
+  // Country names for the codes in countries.json, from the map's region list (loaded below if available).
+  const COUNTRY_NAMES = {};
+
+  // ---------- Form behaviour ----------
+  const type = $("type");
+  function onType() {
+    const t = type.value;
+    $("typeHelp").textContent = TYPE_HELP[t];
+    $("nameHelp").textContent = NAME_HELP[t];
+    $("varietiesField").hidden = t !== "f";
+    update();
+  }
+  type.addEventListener("change", onType);
+  for (const id of ["name", "varieties", "prec"]) $(id).addEventListener("input", update);
+  $("prec").addEventListener("change", update);
+  for (const id of ["lat", "lon"]) $(id).addEventListener("input", () => { placeMarkerFromInputs(); update(); });
+
+  // Accepts "8.39903, -82.31577", "8.39903 -82.31577" or "(8.39903, -82.31577)"; latitude first.
+  $("pasteBtn").addEventListener("click", usePasted);
+  $("paste").addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); usePasted(); } });
+  $("paste").addEventListener("paste", () => setTimeout(usePasted, 0));
+  function usePasted() {
+    const m = $("paste").value.match(/(-?\d+(?:[.,]\d+)?)\s*[,;\s]\s*(-?\d+(?:[.,]\d+)?)/);
+    if (!m) { showCoordErr("Couldn't find two numbers. Paste them as latitude, longitude, e.g. 8.39903, -82.31577."); return; }
+    $("lat").value = m[1].replace(",", "."); $("lon").value = m[2].replace(",", ".");
+    placeMarkerFromInputs(true); update();
+  }
+  function showCoordErr(msg) { $("coordErr").textContent = msg; $("coordErr").hidden = !msg; }
+
+  const num = v => { const s = String(v).trim().replace(",", "."); return s === "" || !/^-?\d+(\.\d+)?$/.test(s) ? NaN : parseFloat(s); };
+  const round5 = x => Math.round(x * 1e5) / 1e5 || 0; // (|| 0 turns −0 into 0)
+  const fmt5 = x => round5(x).toFixed(5);
+
+  // Reads and checks the form. Returns { entry, errors, warnings, info }.
+  function readForm() {
+    const errors = {}, warnings = [];
+    const t = type.value;
+    const name = $("name").value.replace(/\s+/g, " ").trim();
+    if (!name) errors.name = "Enter a name.";
+    else if (name.length < 2) errors.name = "The name is too short.";
+    const lat = num($("lat").value), lon = num($("lon").value);
+    if ($("lat").value.trim() === "" && $("lon").value.trim() === "") errors.coord = "Set the location: click the map or enter latitude and longitude.";
+    else if (!Number.isFinite(lat) || !Number.isFinite(lon)) errors.coord = "Latitude and longitude must be numbers, e.g. 8.39903 and -82.31577.";
+    else if (lat < -90 || lat > 90) errors.coord = "Latitude must be between −90 and 90." + (Math.abs(lat) <= 180 && Math.abs(lon) <= 90 ? " It looks like latitude and longitude may be swapped." : "");
+    else if (lon < -180 || lon > 180) errors.coord = "Longitude must be between −180 and 180.";
+    const varieties = t === "f" ? $("varieties").value.split(",").map(v => v.replace(/\s+/g, " ").trim()).filter(Boolean) : [];
+    if (varieties.length > 3) warnings.push(`Only the first three varieties are kept (${varieties.slice(3).join(", ")} left out).`);
+    let entry = null, nudged = false, where = null;
+    if (!errors.name && !errors.coord) {
+      let x = round5(lon), y = round5(lat);
+      // Another entry at (almost) the same point: place this one a little apart so both dots can be seen and hovered,
+      // as on the map (a spiral of about 100 m steps), and mark it as moved.
+      const taken = (a, b) => farms.features.some(f => Math.abs(f.geometry.coordinates[0] - a) < 0.0003 && Math.abs(f.geometry.coordinates[1] - b) < 0.0003);
+      for (let i = 1; taken(x, y) && i < 40; i++) {
+        const ang = i * 2.39996, r = 0.0009 * Math.sqrt(i);
+        x = round5(lon + r * Math.cos(ang) / Math.max(Math.cos(lat * Math.PI / 180), 0.2)); y = round5(lat + r * Math.sin(ang));
+        nudged = true;
+      }
+      const props = { t, n: name, p: $("prec").value };
+      if (varieties.length) props.v = varieties.slice(0, 3).join(", ");
+      if (nudged) props.s = 1;
+      entry = { type: "Feature", properties: props, geometry: { type: "Point", coordinates: [x, y] } };
+      where = countryAt(lon, lat);
+    }
+    return { entry, errors, warnings, nudged, where, name, t };
+  }
+
+  // ---------- Checks shown while typing ----------
+  function update() {
+    const r = readForm();
+    $("nameErr").hidden = true; $("name").removeAttribute("aria-invalid");
+    showCoordErr(r.errors.coord && ($("lat").value.trim() || $("lon").value.trim()) ? r.errors.coord : "");
+    // Where the point is
+    const note = $("whereNote");
+    if (r.entry && countries) {
+      const [x, y] = r.entry.geometry.coordinates;
+      if (r.where) { note.className = "note note-ok"; note.innerHTML = `This point is in <strong>${esc(r.where)}</strong>.`; }
+      else {
+        const swapped = Math.abs(y) <= 180 && Math.abs(x) <= 90 ? countryAt(y, x) : null;
+        note.className = "note note-warn";
+        note.innerHTML = "This point isn't inside any of the map's coffee-growing countries. Check the latitude and longitude, and that they aren't swapped."
+          + (swapped ? ` Swapped, it would be in <strong>${esc(swapped)}</strong>. <button type="button" class="btn btn-quiet btn-small" id="swapBtn">Swap them</button>` : "");
+        const sb = $("swapBtn");
+        if (sb) sb.onclick = () => { const a = $("lat").value; $("lat").value = $("lon").value; $("lon").value = a; placeMarkerFromInputs(true); update(); };
+      }
+      note.hidden = false;
+    } else note.hidden = true;
+    // Preview card, as on the map's hover card
+    const card = $("previewCard");
+    card.firstElementChild.textContent = r.name || "–";
+    card.lastElementChild.textContent = [TYPE_NAME[r.t], r.entry && r.entry.properties.v, PREC_TEXT[$("prec").value]].filter(Boolean).join(" · ");
+    // Possible duplicates and the nudge
+    const msgs = [...r.warnings];
+    if (r.name) {
+      const key = r.name.toLowerCase();
+      const same = farms.features.filter(f => f.properties.n.toLowerCase() === key);
+      if (same.length) {
+        const near = r.entry && same.find(f => Math.abs(f.geometry.coordinates[0] - r.entry.geometry.coordinates[0]) < 0.5 && Math.abs(f.geometry.coordinates[1] - r.entry.geometry.coordinates[1]) < 0.5);
+        msgs.push(near ? `<strong>Possible duplicate:</strong> "${esc(same[0].properties.n)}" (${TYPE_NAME[near.properties.t].toLowerCase()}) is already on the map nearby. Check it isn't the same place before adding.`
+          : `"${esc(same[0].properties.n)}" is already on the map elsewhere (${same.length} ${same.length > 1 ? "entries" : "entry"}). Fine if it's a different place.`);
+      }
+    }
+    if (r.nudged) msgs.push("Another entry is at this exact point, so this one will be placed about 100 m away so both dots can be seen. The coordinates below show where it will go.");
+    $("dupNote").innerHTML = msgs.map(m => `<div>${m}</div>`).join("");
+    $("dupNote").hidden = !msgs.length;
+    $("json").textContent = r.entry ? JSON.stringify(r.entry, null, 2) : "Fill in the name and location to see the entry.";
+  }
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+  // Which coffee-growing country a point is in (borders from data/countries.json).
+  function inRing(x, y, ring) {
+    let inside = false;
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      const [xi, yi] = ring[i], [xj, yj] = ring[j];
+      if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) inside = !inside;
+    }
+    return inside;
+  }
+  function countryAt(lon, lat) {
+    if (!countries) return null;
+    for (const [cc, g] of Object.entries(countries)) {
+      const polys = g.type === "Polygon" ? [g.coordinates] : g.coordinates;
+      if (polys.some(p => inRing(lon, lat, p[0]) && !p.slice(1).some(h => inRing(lon, lat, h)))) return COUNTRY_NAMES[cc] || cc;
+    }
+    return null;
+  }
+  // Country names, from the map's region list.
+  const rs = document.createElement("script");
+  rs.src = "../regions.js";
+  rs.onload = () => { for (const r of window.COFFEE_REGIONS || []) COUNTRY_NAMES[r.cc] = r.country; update(); };
+  document.head.appendChild(rs);
+
+  // ---------- Location map ----------
+  let map = null, marker = null;
+  try {
+    map = new maplibregl.Map({
+      container: "map", center: [0, 10], zoom: 1.4, attributionControl: { compact: true },
+      style: {
+        version: 8,
+        sources: {
+          sat: { type: "raster", tileSize: 256, maxzoom: 18, attribution: "Imagery © Esri, Maxar, Earthstar Geographics",
+            tiles: ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"] },
+          farms: { type: "geojson", data: { type: "FeatureCollection", features: [] } },
+        },
+        layers: [
+          { id: "sat", type: "raster", source: "sat" },
+          { id: "farms", type: "circle", source: "farms", paint: {
+            "circle-radius": ["interpolate", ["linear"], ["zoom"], 1, 2, 8, 4, 13, 7],
+            "circle-color": ["match", ["get", "t"], "m", COLORS.m, "a", COLORS.a, COLORS.f],
+            "circle-stroke-color": "#fff", "circle-stroke-width": 1 } },
+        ],
+      },
+    });
+    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
+    map.on("load", () => ready.then(() => map.getSource("farms").setData(farms)));
+    const tipPopup = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 8 });
+    map.on("mousemove", "farms", e => {
+      const p = e.features[0].properties;
+      map.getCanvas().style.cursor = "pointer";
+      tipPopup.setLngLat(e.features[0].geometry.coordinates).setText(`${p.n} (${TYPE_NAME[p.t].toLowerCase()})`).addTo(map);
+    });
+    map.on("mouseleave", "farms", () => { map.getCanvas().style.cursor = ""; tipPopup.remove(); });
+    map.on("click", e => {
+      $("lat").value = fmt5(e.lngLat.lat);
+      $("lon").value = fmt5(((e.lngLat.lng + 540) % 360) - 180);
+      placeMarkerFromInputs(false); update();
+    });
+  } catch (err) { $("map").textContent = "The map couldn't load here; enter the latitude and longitude instead."; }
+  function placeMarkerFromInputs(fly) {
+    if (!map) return;
+    const lat = num($("lat").value), lon = num($("lon").value);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) { if (marker) marker.remove(); return; }
+    if (!marker) {
+      marker = new maplibregl.Marker({ color: "#c4274d", draggable: true });
+      marker.on("dragend", () => { const p = marker.getLngLat(); $("lat").value = fmt5(p.lat); $("lon").value = fmt5(((p.lng + 540) % 360) - 180); update(); });
+    }
+    marker.setLngLat([lon, lat]).addTo(map);
+    if (fly) map.flyTo({ center: [lon, lat], zoom: Math.max(map.getZoom(), 11), essential: true });
+  }
+
+  // ---------- Saving ----------
+  // The new entry is inserted as text just before the end of the file, so the rest of the file stays exactly as it is
+  // and the change history shows one added entry.
+  function withEntry(text, entry) {
+    const end = text.lastIndexOf("]");
+    if (end < 0 || !/^\s*\]\s*\}\s*$/.test(text.slice(end))) throw new Error("The map's data file isn't in the expected format.");
+    const before = text.slice(0, end).replace(/\s+$/, "");
+    const updated = before + (before.endsWith("[") ? "" : ",") + JSON.stringify(entry) + text.slice(end);
+    const parsed = JSON.parse(updated); // must still be valid, with the new entry last
+    if (JSON.stringify(parsed.features[parsed.features.length - 1]) !== JSON.stringify(entry)) throw new Error("The entry couldn't be added cleanly.");
+    return updated;
+  }
+  const b64ToText = b64 => new TextDecoder().decode(Uint8Array.from(atob(b64.replace(/\s/g, "")), c => c.charCodeAt(0)));
+  function textToB64(text) {
+    const bytes = new TextEncoder().encode(text); let bin = "";
+    for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    return btoa(bin);
+  }
+  async function gh(token, path, opts = {}) {
+    const res = await fetch(`https://api.github.com/repos/${REPO}${path}`, {
+      ...opts, headers: { Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28", Authorization: `Bearer ${token}`, ...(opts.headers || {}) },
+    });
+    if (!res.ok) {
+      let msg = ""; try { msg = (await res.json()).message || ""; } catch (e) { /* no body */ }
+      throw Object.assign(new Error(msg || `GitHub answered ${res.status}`), { status: res.status });
+    }
+    return opts.raw ? res.text() : res.json();
+  }
+  async function saveToGitHub(token, entry) {
+    const branch = (await gh(token, "")).default_branch;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const meta = await gh(token, `/contents/${FILE}?ref=${encodeURIComponent(branch)}`);
+      const text = meta.content && meta.encoding === "base64" ? b64ToText(meta.content)
+        : await gh(token, `/contents/${FILE}?ref=${encodeURIComponent(branch)}`, { headers: { Accept: "application/vnd.github.raw" }, raw: true });
+      const label = `${TYPE_NAME[entry.properties.t]}: ${entry.properties.n}`;
+      try {
+        const res = await gh(token, `/contents/${FILE}`, { method: "PUT", body: JSON.stringify({
+          message: `Add ${label.charAt(0).toLowerCase() + label.slice(1)} (via add-data page)`, content: textToB64(withEntry(text, entry)), sha: meta.sha, branch }) });
+        return res.commit;
+      } catch (err) {
+        if ((err.status === 409 || err.status === 422) && attempt === 0) continue; // the file changed meanwhile: re-read and retry
+        throw err;
+      }
+    }
+  }
+  function status(kind, html) { const s = $("status"); s.className = `note note-${kind}`; s.innerHTML = html; s.hidden = false; }
+  function firstProblem(r) {
+    if (r.errors.name) { $("nameErr").textContent = r.errors.name; $("nameErr").hidden = false; $("name").setAttribute("aria-invalid", "true"); $("name").focus(); return true; }
+    if (r.errors.coord) { showCoordErr(r.errors.coord); $("lat").focus(); return true; }
+    return false;
+  }
+
+  // Remembered token
+  try { const t = localStorage.getItem(TOKEN_KEY); if (t) { $("token").value = t; $("remember").checked = true; } } catch (e) { /* storage blocked */ }
+  $("remember").addEventListener("change", () => { try { if (!$("remember").checked) localStorage.removeItem(TOKEN_KEY); } catch (e) { /* ignore */ } });
+
+  $("form").addEventListener("submit", async e => {
+    e.preventDefault();
+    await ready;
+    const r = readForm();
+    if (firstProblem(r)) return;
+    const token = $("token").value.trim();
+    if (!token) { status("err", "Paste a GitHub access token to save to the map (see <em>How to get a token</em>), or use <strong>Download updated file instead</strong>."); $("token").focus(); return; }
+    try { if ($("remember").checked) localStorage.setItem(TOKEN_KEY, token); else localStorage.removeItem(TOKEN_KEY); } catch (err) { /* storage blocked: fine */ }
+    const btn = $("submit"); btn.disabled = true; btn.textContent = "Saving…";
+    status("ok", "Saving to the map's data file…");
+    try {
+      const commit = await saveToGitHub(token, r.entry);
+      farms.features.push(r.entry);
+      if (map && map.getSource("farms")) map.getSource("farms").setData(farms);
+      const li = document.createElement("li");
+      li.innerHTML = `<span class="dot" style="background:${COLORS[r.t]}"></span>${esc(r.name)}`;
+      $("addedList").appendChild(li); $("addedBox").hidden = false;
+      status("ok", `<strong>Added.</strong> "${esc(r.name)}" is saved to the map's data. The live map updates in about a minute.`
+        + (commit && commit.html_url ? ` <a href="${commit.html_url}" target="_blank" rel="noopener">View the change on GitHub</a>.` : ""));
+      $("name").value = ""; $("varieties").value = ""; $("paste").value = "";
+      update();
+    } catch (err) {
+      const why = err.status === 401 ? "GitHub didn't accept the token. Check it was copied completely and hasn't expired."
+        : err.status === 403 || err.status === 404 ? "The token doesn't have permission to change this repository. It needs access to brygmanden/terroirmap with Contents set to Read and write."
+        : err.status === 409 || err.status === 422 ? "The data file changed while saving. Press Add to map again."
+        : `Saving didn't work: ${esc(err.message)}. Check your connection and try again.`;
+      status("err", `<strong>Not saved.</strong> ${why}`);
+    } finally { btn.disabled = false; btn.textContent = "Add to map"; }
+  });
+
+  // Without a token: download the site's data file with the entry added, to upload to the repository by hand.
+  $("download").addEventListener("click", async () => {
+    await ready;
+    const r = readForm();
+    if (firstProblem(r)) return;
+    try {
+      const text = await fetch(SITE_FILE, { cache: "no-cache" }).then(res => { if (!res.ok) throw new Error(res.status); return res.text(); });
+      const blob = new Blob([withEntry(text, r.entry)], { type: "application/geo+json" });
+      const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: "farms.geojson" });
+      document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+      status("warn", "<strong>Downloaded farms.geojson with the entry added.</strong> To publish it: on GitHub, open the repository's <strong>data</strong> folder, choose <strong>Add file → Upload files</strong>, drop in this file (it replaces the old one) and commit. Add one entry per download, or the earlier ones are lost.");
+    } catch (err) { status("err", `Couldn't build the file: ${esc(err.message)}`); }
+  });
+
+  onType();
+  ready.then(update);
+})();
+</script>
+</body>
+</html>

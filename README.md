@@ -31,6 +31,7 @@ Any static host works too, for example GitHub Pages, Netlify or Cloudflare Pages
 | `data/outlines/<CC>.json` | Region outlines, one file per country (ISO code), loaded only when a region in that country is selected |
 | `data/farms.geojson` | 3,959 coffee farms, mills and auctions with a location (from `global_coffee_farms_mills_auctions.csv`): type, name, up to three varieties (farms only) and how exact the position is. Contact details and owner names are left out |
 | `data/countries.json` | Borders of the 60 coffee countries (Natural Earth 1:50m, public domain), keyed by ISO code; loaded only for `?place=<country>&isolate=1` |
+| `add-data/index.html` | Data entry page for adding a farm, mill or auction to `data/farms.geojson` (see "Adding farms, mills and auctions") |
 | `assets/fonts/bh/` | Barista Hustle web fonts (Head, NoBH) used by the page |
 | `assets/fonts/glyphs/` | Map-label glyphs (SDF `.pbf`) built from NoBH Regular/Bold: Latin, Thai (system Thai font fallback) and punctuation ranges |
 | `soils.js` | The 32 WRB soil groups from Prof Steven Abbott: map colour, theme, descriptions, drainage/nutrients/acidity/depth, coffee suitability and a typical horizon profile. Drives the soil map colours, legend, tooltips and the soil details popup |
@@ -101,6 +102,16 @@ Before bigger changes a backup branch is created, e.g. `backup/before-soil-overl
 `data/farms.geojson` is generated from `global_coffee_farms_mills_auctions.csv` (4,135 rows; 176 without a usable location are left out, including most auctions, which run online). Farms are green, mills amber, auctions blue; names (and, for farms, varieties) appear from zoom 9, and overlapping labels are hidden automatically.
 
 Only 136 positions are exact; most are the centre of the farm's town or state. Entries sharing the same point are fanned out on a small spiral (about 100 m–1.5 km) so each dot can be seen and hovered. The spread is a display aid, not a real position; the hover card says how exact each one is.
+
+## Adding farms, mills and auctions
+
+Open **`add-data/`** on the site (https://brygmanden.github.io/terroirmap/add-data/) to add an entry without editing files:
+
+1. Choose the type (farm, mill or auction) and enter the name, plus up to three varieties for a farm.
+2. Set the location: click the small map (drag the pin to adjust), paste coordinates copied from a map app, or type latitude and longitude. The page says which coffee country the point is in, and offers to swap latitude and longitude if they look the wrong way round.
+3. Choose how exact the location is, check the preview (duplicate names nearby are flagged; an entry on an occupied point is placed about 100 m apart so both dots show), then press **Add to map**.
+
+Saving appends one entry to `data/farms.geojson` in this repository through the GitHub API, as a commit on the default branch, which redeploys the site (about a minute). It needs a fine-grained GitHub token with access to this repository only and **Contents: Read and write**; the page explains how to create one and can remember it on that device (stored only in that browser). Without a token, **Download updated file instead** gives a `farms.geojson` with the entry added, to upload to the `data` folder by hand. The page is not linked from the map and asks search engines not to index it.
 
 ## Soil types
 
